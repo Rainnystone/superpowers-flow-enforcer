@@ -13,6 +13,18 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read TOOL_INPUT prompt for bypass keywords: skip brainstorming, skip tdd, skip review, skip finishing, 跳过 brainstorming, 跳过测试, 跳过 review, 跳过 finishing, 不需要 brainstorming, 不需要测试. If found: extract phase (brainstorming/tdd/review/finishing) and reason. Run bash ${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh to set exceptions.skip_PHASE true and exceptions.reason. Then return JSON with hookSpecificOutput permissionDecision ask and systemMessage: Bypass detected for PHASE phase. This workflow phase is important for quality. Please confirm you want to skip this phase. If not found: return continue true.",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Edit|Write",
@@ -93,7 +105,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read transcript for completion keywords: done complete tests pass fixed working. If found: Check current message for FRESH verification evidence. Fresh evidence means: actual test command output in this message showing tests passing. Stale evidence: claims without output, output from previous messages. If NO fresh evidence: return JSON with decision block and reason: Completion claimed without verification - run tests NOW and show output. If fresh evidence present: return JSON with decision approve.",
+            "prompt": "Read current user message for interrupt keywords: 停止, stop, pause, 暂停, 暂停一下, 明天继续, 稍后继续, 休息一下, break. If found: read state at CLAUDE_PROJECT_DIR/.claude/flow_state.json, set session.interrupted true and session.interrupt_reason to the detected keyword, then return JSON with decision approve and systemMessage: Session interrupt detected. State recorded for resumption later. If no interrupt keywords: check transcript for completion keywords: done complete tests pass fixed working. If found: Check current message for FRESH verification evidence. Fresh evidence means: actual test command output in this message showing tests passing. Stale evidence: claims without output, output from previous messages. If NO fresh evidence: return JSON with decision block and reason: Completion claimed without verification - run tests NOW and show output. If fresh evidence present: return JSON with decision approve.",
             "timeout": 30
           }
         ]
@@ -103,7 +115,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if all tasks in review.tasks have both spec_review_passed AND code_review_passed as true. If all tasks reviewed AND finishing.skill_invoked is false: return JSON with decision block and reason: All tasks reviewed - invoke superpowers:finishing-a-development-branch skill before stopping. If finishing.skill_invoked is true or tasks still incomplete: return JSON with decision approve.",
+            "prompt": "Read state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if session.interrupted is true. If true: return JSON with decision approve. Otherwise check if all tasks in review.tasks have both spec_review_passed AND code_review_passed as true. If all tasks reviewed AND finishing.skill_invoked is false: return JSON with decision block and reason: All tasks reviewed - invoke superpowers:finishing-a-development-branch skill before stopping. If finishing.skill_invoked is true or tasks still incomplete: return JSON with decision approve.",
             "timeout": 30
           }
         ]
