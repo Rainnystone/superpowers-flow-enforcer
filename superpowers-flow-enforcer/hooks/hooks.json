@@ -33,6 +33,26 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read TOOL_INPUT file_path and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if file path matches plan directory pattern docs/superpowers/plans/*.md or configured planDirectory. If matches AND worktree.created is false: return JSON with decision block and reason: Plan written - create worktree with superpowers:using-git-worktrees skill before starting TDD. If worktree.created is true or file not in plan dir: return continue true.",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read TOOL_INPUT command and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if command contains git worktree add. If matches AND worktree.baseline_tests_passed is false: return JSON with decision block and reason: Worktree created - run setup script and baseline tests first per superpowers:using-git-worktrees skill. If worktree.baseline_tests_passed is true or command not worktree add: return continue true.",
+            "timeout": 30
+          }
+        ]
       }
     ]
   }
