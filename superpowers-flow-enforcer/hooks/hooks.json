@@ -1,0 +1,39 @@
+{
+  "description": "Superpowers Flow Enforcer - Hooks to prevent skipping workflow phases (in progress)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/init-state.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read state file at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If current_phase is brainstorming AND brainstorming.skill_invoked is true: Check findings_updated field. If false or findings_last_update older than 5 minutes: return JSON with decision block and reason: Brainstorming findings outdated - update findings.md after each question. Otherwise return continue true. If not in brainstorming phase, return continue true.",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read TOOL_INPUT file_path and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if file path matches spec directory pattern docs/superpowers/specs/*.md or configured specDirectory. If matches AND brainstorming.spec_self_reviewed is false: return JSON with decision block and reason: SPEC written - execute SPEC Self-Review per brainstorming skill then request user review before invoking writing-plans. If spec_self_reviewed is true or file not in spec dir: return continue true.",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}
