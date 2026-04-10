@@ -13,6 +13,18 @@
         ]
       }
     ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read TOOL_INPUT file_path and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. TDD enforcement: 1) Check if file is test file: path has test/tests/spec/__tests__ or filename has .test. .spec. _test. _spec. If test file: return approve with hookSpecificOutput permissionDecision. 2) Run bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-exception.sh with file_path. If is_exception true: return approve. 3) Check exceptions.skip_tdd AND exceptions.user_confirmed both true: return approve for bypass. 4) Production files: infer test paths by replacing extension with .test.ext, check test/tests/spec/__tests__ dirs. Check if test exists AND in tdd.tests_verified_fail. If NOT: return reject with reason NO PRODUCTION CODE WITHOUT FAILING TEST. If YES: return approve. Always use hookSpecificOutput with permissionDecision approve or reject.",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "AskUserQuestion",
