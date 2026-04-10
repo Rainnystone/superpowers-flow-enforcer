@@ -20,7 +20,6 @@ read -r -d '' EXCEPTIONS <<'EOF' || true
 docs/superpowers/specs/*
 docs/superpowers/plans/*
 docs/design/*
-superpowers-flow-enforcer/*
 .claude/*
 package.json
 package-lock.json
@@ -67,7 +66,7 @@ for pattern in $EXCEPTIONS; do
         docs/superpowers/specs/*|docs/superpowers/plans/*|docs/design/*)
           CATEGORY="specs"
           ;;
-        superpowers-flow-enforcer/*|.claude/*)
+        .claude/*)
           CATEGORY="plugin"
           ;;
         package.json|package-lock.json|Cargo.toml|Cargo.lock|pyproject.toml|poetry.lock)

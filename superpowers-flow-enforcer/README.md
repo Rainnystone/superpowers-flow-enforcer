@@ -1,5 +1,7 @@
 # Superpowers Flow Enforcer
 
+English | [中文](./README_cn.md)
+
 A Claude Code Plugin that enforces the superpowers workflow through hooks, preventing you from skipping critical development phases.
 
 ## Overview
@@ -105,6 +107,8 @@ superpowers-flow-enforcer/
 ├── scripts/
 │   ├── init-state.sh      # SessionStart state initialization
 │   ├── update-state.sh    # State update helper
+│   ├── sync-user-prompt-state.sh # UserPromptSubmit state sync
+│   ├── sync-post-tool-state.sh   # PostToolUse state sync
 │   └── check-exception.sh # TDD exception detection
 └── templates/
     └── flow_state.json.tmpl # State file template

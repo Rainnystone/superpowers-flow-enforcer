@@ -18,8 +18,13 @@
         "matcher": "*",
         "hooks": [
           {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-user-prompt-state.sh",
+            "timeout": 10
+          },
+          {
             "type": "prompt",
-            "prompt": "Read TOOL_INPUT prompt for bypass keywords: skip brainstorming, skip tdd, skip review, skip finishing, 跳过 brainstorming, 跳过测试, 跳过 review, 跳过 finishing, 不需要 brainstorming, 不需要测试. If found: extract phase (brainstorming/tdd/review/finishing) and reason. Run bash ${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh to set exceptions.skip_PHASE true and exceptions.reason. Then return JSON with hookSpecificOutput permissionDecision ask and systemMessage: Bypass detected for PHASE phase. This workflow phase is important for quality. Please confirm you want to skip this phase. If not found: return continue true.",
+            "prompt": "Read $USER_PROMPT and state file at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If user asks to skip brainstorming/tdd/review/finishing and exceptions.user_confirmed is not true, return {\"continue\": false, \"systemMessage\": \"检测到跳过流程请求。请先明确确认：确认跳过 <phase>，并给出原因。\"}. Otherwise return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -31,7 +36,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read TOOL_INPUT file_path and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. TDD enforcement: 1) Check if file is test file: path has test/tests/spec/__tests__ or filename has .test. .spec. _test. _spec. If test file: return approve with hookSpecificOutput permissionDecision. 2) Run bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-exception.sh with file_path. If is_exception true: return approve. 3) Check exceptions.skip_tdd AND exceptions.user_confirmed both true: return approve for bypass. 4) Production files: infer test paths by replacing extension with .test.ext, check test/tests/spec/__tests__ dirs. Check if test exists AND in tdd.tests_verified_fail. If NOT: return reject with reason NO PRODUCTION CODE WITHOUT FAILING TEST. If YES: return approve. Always use hookSpecificOutput with permissionDecision approve or reject.",
+            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Enforce TDD in this order: (1) If path is test-like (contains test/tests/spec/__tests__ or name has .test. .spec. _test. _spec.), return {\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"},\"systemMessage\":\"Writing test file allowed.\"}. (2) If path matches exception patterns (*.md, docs/*, *.json, *.yaml, *.yml, *.config.*, .env*, *.d.ts, types/*.ts, *.types.ts, dist/*, build/*, docs/superpowers/specs/*, docs/superpowers/plans/*), return allow. (3) If exceptions.skip_tdd and exceptions.user_confirmed are both true, return allow. (4) Otherwise treat as production file: infer candidate tests (same basename with .test/.spec). If no candidate appears in tdd.tests_verified_fail, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST. 先写测试并运行到失败。\"}. Else return allow.",
             "timeout": 30
           }
         ]
@@ -39,11 +44,21 @@
     ],
     "PostToolUse": [
       {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-post-tool-state.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
         "matcher": "AskUserQuestion",
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read state file at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If current_phase is brainstorming AND brainstorming.skill_invoked is true: Check findings_updated field. If false or findings_last_update older than 5 minutes: return JSON with decision block and reason: Brainstorming findings outdated - update findings.md after each question. Otherwise return continue true. If not in brainstorming phase, return continue true.",
+            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If current_phase is brainstorming and brainstorming.skill_invoked is true, and brainstorming.findings_updated is false, return {\"continue\": false, \"systemMessage\": \"Brainstorming 阶段每次提问后必须更新 findings.md。\"}. Otherwise return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -53,7 +68,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read TOOL_INPUT file_path and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if file path matches spec directory pattern docs/superpowers/specs/*.md or configured specDirectory. If matches AND brainstorming.spec_self_reviewed is false: return JSON with decision block and reason: SPEC written - execute SPEC Self-Review per brainstorming skill then request user review before invoking writing-plans. If spec_self_reviewed is true or file not in spec dir: return continue true.",
+            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If file path matches docs/superpowers/specs/*.md and brainstorming.spec_self_reviewed is false, return {\"continue\": false, \"systemMessage\": \"SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。\"}. Else return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -63,7 +78,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read TOOL_INPUT file_path and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if file path matches plan directory pattern docs/superpowers/plans/*.md or configured planDirectory. If matches AND worktree.created is false: return JSON with decision block and reason: Plan written - create worktree with superpowers:using-git-worktrees skill before starting TDD. If worktree.created is true or file not in plan dir: return continue true.",
+            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If file path matches docs/superpowers/plans/*.md and worktree.created is false, return {\"continue\": false, \"systemMessage\": \"Plan 已写完，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。\"}. Else return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -73,7 +88,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read TOOL_INPUT command and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if command contains git worktree add. If matches AND worktree.baseline_tests_passed is false: return JSON with decision block and reason: Worktree created - run setup script and baseline tests first per superpowers:using-git-worktrees skill. If worktree.baseline_tests_passed is true or command not worktree add: return continue true.",
+            "prompt": "Read $TOOL_INPUT.command and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If command contains 'git worktree add' and worktree.baseline_tests_passed is false, return {\"continue\": false, \"systemMessage\": \"Worktree 已创建，必须先完成 setup 和 baseline tests。\"}. Else return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -83,7 +98,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read TOOL_INPUT and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. If TaskUpdate status is completed: Check review.tasks[task_id] for spec_review_passed and code_review_passed. If either is false or missing: return JSON with decision block and reason: Task marked complete but review incomplete - run superpowers:requesting-code-review for two-stage review. If both passed: return continue true. For other TaskUpdate statuses: return continue true.",
+            "prompt": "Read $TOOL_INPUT and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If task status is completed and review.tasks[task_id] is missing or not fully passed (spec_review_passed/code_review_passed), return {\"continue\": false, \"systemMessage\": \"Task 标记完成前，必须完成两阶段 review。\"}. Otherwise return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -93,7 +108,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read TOOL_OUTPUT and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if TOOL_OUTPUT contains test failure indicators: FAIL Error failed assertion unexpected broken. If test failure detected AND debugging.active is false: return JSON with decision block and reason: Test failed - invoke superpowers:systematic-debugging skill before proposing fixes. Track debugging.active in state. If debugging.active is true or no test failure: return continue true.",
+            "prompt": "Read $TOOL_RESULT and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If result contains test failure indicators (FAIL, failed, Error, assertion) and debugging.active is not true, return {\"continue\": false, \"systemMessage\": \"检测到测试失败，请先执行 systematic-debugging 再改代码。\"}. Otherwise return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -105,7 +120,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read current user message for interrupt keywords: 停止, stop, pause, 暂停, 暂停一下, 明天继续, 稍后继续, 休息一下, break. If found: read state at CLAUDE_PROJECT_DIR/.claude/flow_state.json, set session.interrupted true and session.interrupt_reason to the detected keyword, then return JSON with decision approve and systemMessage: Session interrupt detected. State recorded for resumption later. If no interrupt keywords: check transcript for completion keywords: done complete tests pass fixed working. If found: Check current message for FRESH verification evidence. Fresh evidence means: actual test command output in this message showing tests passing. Stale evidence: claims without output, output from previous messages. If NO fresh evidence: return JSON with decision block and reason: Completion claimed without verification - run tests NOW and show output. If fresh evidence present: return JSON with decision approve.",
+            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json and transcript at $TRANSCRIPT_PATH. If interrupt.allowed is true, return {\"decision\": \"approve\", \"systemMessage\": \"Interrupt recorded.\"}. Otherwise if completion keywords appear (done/complete/tests pass/fixed/working/完成/修复) but no fresh passing verification evidence in the latest context, return {\"decision\": \"block\", \"reason\": \"Completion claimed without fresh verification evidence. Run verification now and show output.\"}. Else return {\"decision\": \"approve\"}.",
             "timeout": 30
           }
         ]
@@ -115,7 +130,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if session.interrupted is true. If true: return JSON with decision approve. Otherwise check if all tasks in review.tasks have both spec_review_passed AND code_review_passed as true. If all tasks reviewed AND finishing.skill_invoked is false: return JSON with decision block and reason: All tasks reviewed - invoke superpowers:finishing-a-development-branch skill before stopping. If finishing.skill_invoked is true or tasks still incomplete: return JSON with decision approve.",
+            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If interrupt.allowed is true, return {\"decision\": \"approve\"}. If all tasks in review.tasks are fully passed and finishing.skill_invoked is false, return {\"decision\": \"block\", \"reason\": \"所有任务都已 review，通过后还需执行 finishing-a-development-branch。\"}. Otherwise return {\"decision\": \"approve\"}.",
             "timeout": 30
           }
         ]
