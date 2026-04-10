@@ -16,7 +16,7 @@
 
 ## 安装
 
-1. 将 `superpowers-flow-enforcer` 目录复制到你的 Claude 插件文件夹：
+1. 将本仓库内文件复制到 Claude 插件目录：
    ```
    ~/.claude/plugins/superpowers-flow-enforcer/
    ```
@@ -100,19 +100,20 @@ PreToolUse hook 执行 TDD 铁律：
 ## 文件结构
 
 ```
-superpowers-flow-enforcer/
-├── manifest.json          # 插件元数据
-├── CLAUDE.md              # Claude 指令文档
-├── README.md              # 英文文档
-├── README_cn.md           # 中文文档
-├── hooks/
-│   └── hooks.json         # 所有 hook 配置
-├── scripts/
-│   ├── init-state.sh      # SessionStart 状态初始化
-│   ├── update-state.sh    # 状态更新辅助脚本
-│   └── check-exception.sh # TDD 例外检测
-└── templates/
-    └── flow_state.json.tmpl # 状态文件模板
+manifest.json          # 插件元数据
+CLAUDE.md              # Claude 指令文档
+README.md              # 英文文档
+README_cn.md           # 中文文档
+hooks/
+└── hooks.json         # 所有 hook 配置
+scripts/
+├── init-state.sh      # SessionStart 状态初始化
+├── update-state.sh    # 状态更新辅助脚本
+├── sync-user-prompt-state.sh # UserPromptSubmit 状态同步
+├── sync-post-tool-state.sh   # PostToolUse 状态同步
+└── check-exception.sh # TDD 例外检测
+templates/
+└── flow_state.json.tmpl # 状态文件模板
 ```
 
 ## 状态追踪

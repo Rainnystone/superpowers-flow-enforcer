@@ -16,7 +16,7 @@ The plugin implements hard blocking hooks that enforce:
 
 ## Installation
 
-1. Copy the `superpowers-flow-enforcer` directory to your Claude plugins folder:
+1. Copy this repository's files into your Claude plugins folder:
    ```
    ~/.claude/plugins/superpowers-flow-enforcer/
    ```
@@ -99,19 +99,20 @@ When claiming completion ("done", "tests pass", "fixed"):
 ## Files
 
 ```
-superpowers-flow-enforcer/
-├── manifest.json          # Plugin metadata
-├── CLAUDE.md              # Plugin instructions for Claude
-├── hooks/
-│   └── hooks.json         # All hook configurations
-├── scripts/
-│   ├── init-state.sh      # SessionStart state initialization
-│   ├── update-state.sh    # State update helper
-│   ├── sync-user-prompt-state.sh # UserPromptSubmit state sync
-│   ├── sync-post-tool-state.sh   # PostToolUse state sync
-│   └── check-exception.sh # TDD exception detection
-└── templates/
-    └── flow_state.json.tmpl # State file template
+manifest.json          # Plugin metadata
+CLAUDE.md              # Plugin instructions for Claude
+README.md              # English docs
+README_cn.md           # Chinese docs
+hooks/
+└── hooks.json         # All hook configurations
+scripts/
+├── init-state.sh      # SessionStart state initialization
+├── update-state.sh    # State update helper
+├── sync-user-prompt-state.sh # UserPromptSubmit state sync
+├── sync-post-tool-state.sh   # PostToolUse state sync
+└── check-exception.sh # TDD exception detection
+templates/
+└── flow_state.json.tmpl # State file template
 ```
 
 ## State Tracking
