@@ -40,6 +40,16 @@
             "timeout": 30
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read $TOOL_INPUT.command. If command directly reads/writes .claude/flow_state.json and does NOT call ${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"禁止直接操作 flow_state.json，请通过 update-state.sh。\"}. Else return {\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}.",
+            "timeout": 30
+          }
+        ]
       }
     ],
     "PostToolUse": [
