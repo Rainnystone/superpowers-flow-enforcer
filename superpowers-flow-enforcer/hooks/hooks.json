@@ -1,5 +1,5 @@
 {
-  "description": "Superpowers Flow Enforcer - Hooks to prevent skipping workflow phases (in progress)",
+  "description": "Superpowers Flow Enforcer - Hooks to prevent skipping workflow phases",
   "hooks": {
     "SessionStart": [
       {
@@ -62,6 +62,48 @@
           {
             "type": "prompt",
             "prompt": "Read TOOL_INPUT command and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if command contains git worktree add. If matches AND worktree.baseline_tests_passed is false: return JSON with decision block and reason: Worktree created - run setup script and baseline tests first per superpowers:using-git-worktrees skill. If worktree.baseline_tests_passed is true or command not worktree add: return continue true.",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "TaskUpdate",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read TOOL_INPUT and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. If TaskUpdate status is completed: Check review.tasks[task_id] for spec_review_passed and code_review_passed. If either is false or missing: return JSON with decision block and reason: Task marked complete but review incomplete - run superpowers:requesting-code-review for two-stage review. If both passed: return continue true. For other TaskUpdate statuses: return continue true.",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read TOOL_OUTPUT and state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if TOOL_OUTPUT contains test failure indicators: FAIL Error failed assertion unexpected broken. If test failure detected AND debugging.active is false: return JSON with decision block and reason: Test failed - invoke superpowers:systematic-debugging skill before proposing fixes. Track debugging.active in state. If debugging.active is true or no test failure: return continue true.",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read transcript for completion keywords: done complete tests pass fixed working. If found: Check current message for FRESH verification evidence. Fresh evidence means: actual test command output in this message showing tests passing. Stale evidence: claims without output, output from previous messages. If NO fresh evidence: return JSON with decision block and reason: Completion claimed without verification - run tests NOW and show output. If fresh evidence present: return JSON with decision approve.",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read state at CLAUDE_PROJECT_DIR/.claude/flow_state.json. Check if all tasks in review.tasks have both spec_review_passed AND code_review_passed as true. If all tasks reviewed AND finishing.skill_invoked is false: return JSON with decision block and reason: All tasks reviewed - invoke superpowers:finishing-a-development-branch skill before stopping. If finishing.skill_invoked is true or tasks still incomplete: return JSON with decision approve.",
             "timeout": 30
           }
         ]
