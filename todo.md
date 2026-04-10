@@ -11,4 +11,4 @@
 - [x] 增加工具后状态同步脚本 `sync-post-tool-state.sh`
 - [x] 收紧 TDD 例外范围（移除 `superpowers-flow-enforcer/*` 全目录豁免）
 - [x] 本地验证：JSON、shell 语法、脚本行为
-- [ ] 提交并推送到远端
+- [x] 提交并推送到远端
