@@ -8,6 +8,11 @@ fi
 
 INPUT="$(cat)"
 
+if ! printf '%s' "$INPUT" | jq empty >/dev/null 2>&1; then
+  echo '{"continue":true}'
+  exit 0
+fi
+
 resolve_project_dir() {
   if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
     printf '%s\n' "$CLAUDE_PROJECT_DIR"
