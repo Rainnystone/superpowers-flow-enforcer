@@ -67,6 +67,19 @@ run_sync() {
     | HOOK_EVENT=PostToolUseFailure bash scripts/sync-post-tool-state.sh >"$OUTPUT_FILE"
 }
 
+run_sync_with_cwd() {
+  local cwd="$1"
+  local command="$2"
+  local result="$3"
+  local active="${4:-false}"
+
+  reset_state "$active"
+
+  jq -n --arg cwd "$cwd" --arg command "$command" --arg result "$result" \
+    '{cwd:$cwd, tool_name:"Bash", tool_input:{command:$command}, tool_result:$result}' \
+    | HOOK_EVENT=PostToolUseFailure bash scripts/sync-post-tool-state.sh >"$OUTPUT_FILE"
+}
+
 assert_debugging_blocked() {
   assert_json_equals "$OUTPUT_FILE" '.continue' 'false'
   assert_json_equals "$OUTPUT_FILE" '.systemMessage' '"检测到测试失败，请先执行 systematic-debugging 再改代码。"'
@@ -94,6 +107,16 @@ assert_pending_failure_record() {
 
 run_sync 'vitest src/foo.test.ts' 'exited 1'
 assert_auto_recorded_failure 'src/foo.test.ts'
+
+unset CLAUDE_PROJECT_DIR
+mkdir -p "$TMP_DIR/cwd-project/.claude"
+mkdir -p "$TMP_DIR/cwd-project/nested/child"
+CWD_STATE_FILE="$TMP_DIR/cwd-project/.claude/flow_state.json"
+STATE_FILE="$CWD_STATE_FILE"
+run_sync_with_cwd "$TMP_DIR/cwd-project/nested/child" 'vitest src/cwd-fallback.test.ts' 'exited 1'
+assert_auto_recorded_failure 'src/cwd-fallback.test.ts'
+STATE_FILE="$TMP_DIR/project/.claude/flow_state.json"
+export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 
 run_sync 'pytest tests/test_post_tool_use_failure.sh' 'exited 1'
 assert_auto_recorded_failure 'tests/test_post_tool_use_failure.sh'

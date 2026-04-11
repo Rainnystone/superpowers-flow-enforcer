@@ -20,11 +20,19 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming
 printf '{"tool_name":"Write","tool_input":{"file_path":"findings.md"}}' | bash scripts/sync-post-tool-state.sh >/dev/null
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming.findings_updated_after_question' 'true'
 
-ask_user_question_prompt="$(
+ask_user_question_hook_type="$(
   jq -r '
     .hooks.PreToolUse[]
     | select(.matcher == "AskUserQuestion")
-    | .hooks[0].prompt
+    | .hooks[0].type // ""
+  ' hooks/hooks.json
+)"
+
+ask_user_question_hook_command="$(
+  jq -r '
+    .hooks.PreToolUse[]
+    | select(.matcher == "AskUserQuestion")
+    | .hooks[0].command // ""
   ' hooks/hooks.json
 )"
 
@@ -52,25 +60,51 @@ if [ "$post_tool_ask_count" -ne 0 ]; then
   exit 1
 fi
 
-case "$ask_user_question_prompt" in
-  *"brainstorming.skill_invoked"*)
-    echo "Expected AskUserQuestion hook gate to stop depending on brainstorming.skill_invoked" >&2
-    exit 1
-    ;;
-esac
+if [ "$ask_user_question_hook_type" != "command" ]; then
+  echo "Expected AskUserQuestion hook gate to use command type" >&2
+  exit 1
+fi
 
-case "$ask_user_question_prompt" in
-  *"question_asked"*) : ;;
-  *)
-    echo "Expected AskUserQuestion hook gate to reference brainstorming.question_asked" >&2
-    exit 1
-    ;;
-esac
+if [ "$ask_user_question_hook_command" != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-pretool-gates.sh' ]; then
+  echo "Expected AskUserQuestion hook gate to call scripts/check-pretool-gates.sh" >&2
+  exit 1
+fi
 
-case "$ask_user_question_prompt" in
-  *"findings_updated_after_question"*) : ;;
-  *)
-    echo "Expected AskUserQuestion hook gate to reference brainstorming.findings_updated_after_question" >&2
-    exit 1
-    ;;
-esac
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+jq '
+  .workflow.active = true
+  | .current_phase = "brainstorming"
+  | .brainstorming.question_asked = true
+  | .brainstorming.findings_updated_after_question = false
+' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+
+deny_output="$(
+  jq -n '{
+    hook_event_name:"PreToolUse",
+    tool_name:"AskUserQuestion"
+  }' \
+    | bash scripts/check-pretool-gates.sh
+)"
+[ -n "$deny_output" ] || {
+  echo "Expected AskUserQuestion command gate to deny when findings were not updated" >&2
+  exit 1
+}
+assert_json_equals <(printf '%s' "$deny_output") '.hookSpecificOutput.hookEventName' '"PreToolUse"'
+assert_json_equals <(printf '%s' "$deny_output") '.hookSpecificOutput.permissionDecision' '"deny"'
+assert_json_equals <(printf '%s' "$deny_output") '.hookSpecificOutput.permissionDecisionReason | contains("findings.md")' 'true'
+
+jq '.workflow.active = false' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+
+allow_output="$(
+  jq -n '{
+    hook_event_name:"PreToolUse",
+    tool_name:"AskUserQuestion"
+  }' \
+    | bash scripts/check-pretool-gates.sh
+)"
+[ -z "$allow_output" ] || {
+  echo "Expected AskUserQuestion command gate to allow when workflow is inactive" >&2
+  exit 1
+}

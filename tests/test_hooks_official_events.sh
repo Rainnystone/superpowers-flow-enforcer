@@ -5,13 +5,26 @@ source tests/helpers/assert.sh
 
 post_tool_use_matchers="$(jq -r '.hooks.PostToolUse[].matcher' hooks/hooks.json)"
 
-printf '%s\n' "$post_tool_use_matchers" | grep -Fxq 'TaskCompleted' || {
-  echo 'Expected PostToolUse to include TaskCompleted' >&2
-  exit 1
-}
-
 if printf '%s\n' "$post_tool_use_matchers" | grep -Fxq 'TaskUpdate'; then
   echo 'Expected PostToolUse to stop using TaskUpdate' >&2
+  exit 1
+fi
+
+user_prompt_hook_count="$(jq '.hooks.UserPromptSubmit[0].hooks | length' hooks/hooks.json)"
+if [ "$user_prompt_hook_count" -ne 1 ]; then
+  echo "Expected UserPromptSubmit to have exactly one hook, got $user_prompt_hook_count" >&2
+  exit 1
+fi
+
+user_prompt_hook_type="$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].type // ""' hooks/hooks.json)"
+if [ "$user_prompt_hook_type" != "command" ]; then
+  echo "Expected UserPromptSubmit to use command hook, got $user_prompt_hook_type" >&2
+  exit 1
+fi
+
+user_prompt_hook_command="$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].command // ""' hooks/hooks.json)"
+if [ "$user_prompt_hook_command" != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-user-prompt-state.sh' ]; then
+  echo "Expected UserPromptSubmit command hook to call scripts/sync-user-prompt-state.sh" >&2
   exit 1
 fi
 
@@ -83,14 +96,8 @@ for hook in model_hooks:
         raise SystemExit(1)
 
 expected_types = {
-    ('UserPromptSubmit', '*'): 'agent',
-    ('PreToolUse', 'Edit|Write'): 'agent',
-    ('PreToolUse', 'AskUserQuestion'): 'agent',
     ('PreToolUse', 'Bash'): 'prompt',
-    ('PostToolUse', 'Write|Edit'): 'agent',
-    ('PostToolUse', 'Write'): 'agent',
-    ('PostToolUse', 'Bash'): 'agent',
-    ('PostToolUse', 'TaskCompleted'): 'agent',
+    ('Stop', '*'): 'prompt',
 }
 
 for key, expected_type in expected_types.items():
@@ -107,139 +114,171 @@ for key, expected_type in expected_types.items():
         sys.stderr.write(f'Expected {event_name}/{matcher} to use type:{expected_type}, got {actual}\n')
         raise SystemExit(1)
 
-user_prompt_submit_prompt = next(
-    hook['prompt'] for hook in model_hooks
-    if hook['event'] == 'UserPromptSubmit' and hook['matcher'] == '*'
-)
-required_user_prompt_fail_open_checks = [
-    'If state file is missing or unreadable',
-    'do not block on that basis',
-    '{"ok": true}',
+stop_prompt_hooks = [
+    hook for hook in model_hooks
+    if hook['event'] == 'Stop' and hook['type'] == 'prompt'
 ]
-missing_user_prompt_fail_open = [
-    needle for needle in required_user_prompt_fail_open_checks
-    if needle not in user_prompt_submit_prompt
-]
-if missing_user_prompt_fail_open:
-    sys.stderr.write(
-        'Expected UserPromptSubmit prompt to include explicit state-read fail-open branch: '
-        + ', '.join(missing_user_prompt_fail_open)
-        + '\n'
-    )
+if len(stop_prompt_hooks) != 1:
+    sys.stderr.write('Expected exactly one model-driven Stop prompt hook\n')
     raise SystemExit(1)
 
-task_completed_prompt = next(
-    hook['prompt'] for hook in model_hooks
-    if hook['event'] == 'PostToolUse' and hook['matcher'] == 'TaskCompleted'
-)
-for required in [
-    'review.tasks[task_id].spec_review_passed',
-    'review.tasks[task_id].code_review_passed',
-]:
-    if required not in task_completed_prompt:
-        sys.stderr.write(f'Expected TaskCompleted prompt to check {required}\n')
-        raise SystemExit(1)
-
-edit_write_prompt = next(
-    hook['prompt'] for hook in model_hooks
-    if hook['event'] == 'PreToolUse' and hook['matcher'] == 'Edit|Write'
-)
-try:
-    branch4_start = edit_write_prompt.index('(4)')
-    branch5_start = edit_write_prompt.index('(5)')
-except ValueError:
-    sys.stderr.write('Expected PreToolUse/Edit|Write prompt to include explicit numbered branch (4) and (5)\n')
-    raise SystemExit(1)
-
-branch4 = edit_write_prompt[branch4_start:branch5_start]
-if 'block unless' in branch4:
-    sys.stderr.write('Expected PreToolUse/Edit|Write branch (4) to avoid natural-language "block unless"\n')
-    raise SystemExit(1)
-if '{"ok": false, "reason":' not in branch4:
-    sys.stderr.write('Expected PreToolUse/Edit|Write branch (4) to return explicit deny schema {"ok": false, "reason": "..."}\n')
-    raise SystemExit(1)
-
-stop_model_hooks = [hook for hook in model_hooks if hook['event'] == 'Stop']
-if len(stop_model_hooks) != 2:
-    sys.stderr.write('Expected exactly two model-driven Stop hooks\n')
-    raise SystemExit(1)
-if any(hook['type'] != 'agent' for hook in stop_model_hooks):
-    sys.stderr.write('Expected both Stop hooks to use type:agent\n')
-    raise SystemExit(1)
-
-for hook in [h for h in model_hooks if h['type'] == 'agent']:
-    prompt = hook['prompt']
-    if 'Parse $ARGUMENTS' not in prompt:
-        sys.stderr.write(f"Expected agent hook {hook['event']}/{hook['matcher']} to explicitly parse $ARGUMENTS\n")
-        raise SystemExit(1)
-
-state_agent_keys = {
-    ('UserPromptSubmit', '*'),
-    ('PreToolUse', 'Edit|Write'),
-    ('PreToolUse', 'AskUserQuestion'),
-    ('PostToolUse', 'Write|Edit'),
-    ('PostToolUse', 'Write'),
-    ('PostToolUse', 'Bash'),
-    ('PostToolUse', 'TaskCompleted'),
+inventory = {
+    (event_name, group.get('matcher', '*'), hook.get('type', ''))
+    for event_name, groups in hooks.items()
+    for group in groups
+    for hook in group.get('hooks', [])
 }
 
-for key in state_agent_keys:
-    event_name, matcher = key
-    agent_hooks = [
-        hook for hook in model_hooks
-        if hook['event'] == event_name and hook['matcher'] == matcher and hook['type'] == 'agent'
-    ]
-    for hook in agent_hooks:
-        prompt = hook['prompt']
-        if 'derive the state path' not in prompt:
-            sys.stderr.write(f"Expected {event_name}/{matcher} to derive the state path from $ARGUMENTS\n")
-            raise SystemExit(1)
-        if 'read the referenced state file' not in prompt:
-            sys.stderr.write(f"Expected {event_name}/{matcher} to read the referenced state file\n")
-            raise SystemExit(1)
-
-transcript_stop_hooks = [
-    hook for hook in stop_model_hooks
-    if 'completion keywords appear' in hook['prompt']
-]
-if len(transcript_stop_hooks) != 1:
-    sys.stderr.write('Expected exactly one Stop hook to perform transcript-based completion-evidence checks\n')
+if ('PreToolUse', 'Edit|Write', 'command') not in inventory:
+    sys.stderr.write('Expected PreToolUse/Edit|Write to use command hook\n')
+    raise SystemExit(1)
+if ('PreToolUse', 'AskUserQuestion', 'command') not in inventory:
+    sys.stderr.write('Expected PreToolUse/AskUserQuestion to use command hook\n')
+    raise SystemExit(1)
+if ('PreToolUse', 'Edit|Write', 'agent') in inventory:
+    sys.stderr.write('Expected PreToolUse/Edit|Write to stop using agent hook\n')
+    raise SystemExit(1)
+if ('PreToolUse', 'AskUserQuestion', 'agent') in inventory:
+    sys.stderr.write('Expected PreToolUse/AskUserQuestion to stop using agent hook\n')
+    raise SystemExit(1)
+for matcher in ('Write|Edit', 'Write', 'Bash'):
+    if ('PostToolUse', matcher, 'agent') in inventory:
+        sys.stderr.write(f'Expected PostToolUse/{matcher} to stop using agent hook\n')
+        raise SystemExit(1)
+if ('PostToolUse', 'TaskCompleted', 'agent') in inventory:
+    sys.stderr.write('Expected PostToolUse/TaskCompleted to stop using agent hook\n')
+    raise SystemExit(1)
+if ('TaskCompleted', '*', 'command') not in inventory:
+    sys.stderr.write('Expected TaskCompleted/* to use command hook\n')
+    raise SystemExit(1)
+if ('TaskCompleted', '*', 'agent') in inventory:
+    sys.stderr.write('Expected TaskCompleted/* to stop using agent hook\n')
+    raise SystemExit(1)
+if ('Stop', '*', 'agent') in inventory:
+    sys.stderr.write('Expected Stop/* to stop using agent hook\n')
+    raise SystemExit(1)
+if ('Stop', '*', 'command') not in inventory:
+    sys.stderr.write('Expected Stop/* to include a command hook\n')
     raise SystemExit(1)
 
-for hook in transcript_stop_hooks:
-    prompt = hook['prompt']
-    if 'derive the state path' not in prompt or 'read the referenced state file' not in prompt:
-        sys.stderr.write('Expected transcript-based Stop hook to derive/read state path from $ARGUMENTS\n')
+pretool_entries = {
+    group.get('matcher', '*'): group.get('hooks', [])
+    for group in hooks.get('PreToolUse', [])
+}
+for matcher in ('Edit|Write', 'AskUserQuestion'):
+    group_hooks = pretool_entries.get(matcher, [])
+    if len(group_hooks) != 1:
+        sys.stderr.write(f'Expected PreToolUse/{matcher} to have exactly one hook\n')
         raise SystemExit(1)
-    if 'derive the transcript path' not in prompt or 'read the referenced transcript file' not in prompt:
-        sys.stderr.write('Expected transcript-based Stop hook to derive/read transcript path from $ARGUMENTS\n')
+    hook = group_hooks[0]
+    if hook.get('type') != 'command':
+        sys.stderr.write(f'Expected PreToolUse/{matcher} hook type to be command\n')
         raise SystemExit(1)
-    if 'fresh passing verification evidence' not in prompt:
-        sys.stderr.write('Expected transcript-based Stop hook to check fresh passing verification evidence\n')
-        raise SystemExit(1)
-    if 'interrupt.allowed' not in prompt:
-        sys.stderr.write('Expected transcript-based Stop hook to check interrupt.allowed\n')
+    if hook.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-pretool-gates.sh':
+        sys.stderr.write(f'Expected PreToolUse/{matcher} command hook to call scripts/check-pretool-gates.sh\n')
         raise SystemExit(1)
 
-state_only_stop_hooks = [hook for hook in stop_model_hooks if hook not in transcript_stop_hooks]
-if len(state_only_stop_hooks) != 1:
-    sys.stderr.write('Expected exactly one state-only Stop hook\n')
+posttool_entries = {
+    group.get('matcher', '*'): group.get('hooks', [])
+    for group in hooks.get('PostToolUse', [])
+}
+posttool_all_hooks = posttool_entries.get('*', [])
+if len(posttool_all_hooks) != 1:
+    sys.stderr.write('Expected PostToolUse/* to have exactly one hook\n')
+    raise SystemExit(1)
+posttool_hook = posttool_all_hooks[0]
+if posttool_hook.get('type') != 'command':
+    sys.stderr.write('Expected PostToolUse/* hook type to be command\n')
+    raise SystemExit(1)
+if posttool_hook.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-post-tool-state.sh':
+    sys.stderr.write('Expected PostToolUse/* command hook to call scripts/sync-post-tool-state.sh\n')
+    raise SystemExit(1)
+for matcher in ('Write|Edit', 'Write', 'Bash'):
+    group_hooks = posttool_entries.get(matcher, [])
+    if group_hooks:
+        sys.stderr.write(f'Expected PostToolUse/{matcher} to be removed and handled inside sync-post-tool-state.sh\n')
+        raise SystemExit(1)
+if posttool_entries.get('TaskCompleted', []):
+    sys.stderr.write('Expected PostToolUse/TaskCompleted to be removed after top-level TaskCompleted migration\n')
     raise SystemExit(1)
 
-for hook in state_only_stop_hooks:
-    prompt = hook['prompt']
-    if 'derive the state path' not in prompt or 'read the referenced state file' not in prompt:
-        sys.stderr.write('Expected state-only Stop hook to derive/read state path from $ARGUMENTS\n')
+task_completed_entries = hooks.get('TaskCompleted', [])
+if len(task_completed_entries) != 1:
+    sys.stderr.write('Expected exactly one TaskCompleted hook group\n')
+    raise SystemExit(1)
+task_completed_hooks = task_completed_entries[0].get('hooks', [])
+if len(task_completed_hooks) != 1:
+    sys.stderr.write('Expected TaskCompleted/* to have exactly one hook\n')
+    raise SystemExit(1)
+task_completed_hook = task_completed_hooks[0]
+if task_completed_hook.get('type') != 'command':
+    sys.stderr.write('Expected TaskCompleted/* hook type to be command\n')
+    raise SystemExit(1)
+if task_completed_hook.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-task-completed.sh':
+    sys.stderr.write('Expected TaskCompleted/* command hook to call scripts/check-task-completed.sh\n')
+    raise SystemExit(1)
+
+stop_entries = hooks.get('Stop', [])
+if len(stop_entries) != 2:
+    sys.stderr.write('Expected exactly two Stop hook groups\n')
+    raise SystemExit(1)
+
+stop_group_inventory = {
+    hook.get('type', ''): hook
+    for group in stop_entries
+    for hook in group.get('hooks', [])
+}
+if set(stop_group_inventory.keys()) != {'prompt', 'command'}:
+    sys.stderr.write('Expected Stop to contain exactly one prompt hook and one command hook\n')
+    raise SystemExit(1)
+
+stop_command = stop_group_inventory['command']
+if stop_command.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-stop-review-gate.sh':
+    sys.stderr.write('Expected Stop command hook to call scripts/check-stop-review-gate.sh\n')
+    raise SystemExit(1)
+
+stop_prompt = stop_group_inventory['prompt'].get('prompt', '')
+if '$ARGUMENTS' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to rely on $ARGUMENTS\n')
+    raise SystemExit(1)
+if 'Only use input values from $ARGUMENTS' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to explicitly require input-only behavior\n')
+    raise SystemExit(1)
+if 'Do not assume any file access.' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to explicitly forbid file access assumptions\n')
+    raise SystemExit(1)
+if 'last_assistant_message' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to explicitly rely on last_assistant_message\n')
+    raise SystemExit(1)
+if 'transcript' in stop_prompt.lower():
+    sys.stderr.write('Expected Stop prompt hook to stop assuming transcript file access\n')
+    raise SystemExit(1)
+for token in (
+    'read the referenced state file',
+    'derive the state path',
+    'read the referenced transcript file',
+    'derive the transcript path',
+    'read cwd',
+    'read file',
+):
+    if token in stop_prompt:
+        sys.stderr.write(f'Expected Stop prompt hook to avoid file/cwd access hint: {token}\n')
         raise SystemExit(1)
-    if 'derive the transcript path' in prompt or 'read the referenced transcript file' in prompt:
-        sys.stderr.write('Expected state-only Stop hook to avoid unnecessary transcript coupling\n')
-        raise SystemExit(1)
-    if 'finishing.invoked' not in prompt:
-        sys.stderr.write('Expected state-only Stop hook to check finishing.invoked\n')
-        raise SystemExit(1)
-    if 'interrupt.allowed' not in prompt:
-        sys.stderr.write('Expected state-only Stop hook to check interrupt.allowed\n')
-        raise SystemExit(1)
+if 'completion keywords appear' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to encode completion-keyword detection\n')
+    raise SystemExit(1)
+if 'fresh passing verification evidence' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to encode freshness requirement\n')
+    raise SystemExit(1)
+if 'without fresh passing verification evidence in last_assistant_message' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to block stale completion claims using last_assistant_message\n')
+    raise SystemExit(1)
+if 'If completion keywords appear and fresh passing verification evidence appears in last_assistant_message, return {"ok": true}.' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to encode the fresh-evidence allow path\n')
+    raise SystemExit(1)
+if 'If completion keywords do not appear, return {"ok": true}.' not in stop_prompt:
+    sys.stderr.write('Expected Stop prompt hook to encode the non-completion allow path\n')
+    raise SystemExit(1)
 
 bash_prompt = next(
     hook['prompt'] for hook in model_hooks

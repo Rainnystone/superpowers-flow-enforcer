@@ -1,32 +1,144 @@
 #!/bin/bash
 set -euo pipefail
 
+HOOK_EVENT="${HOOK_EVENT:-PostToolUse}"
+
+allow_hook() {
+  if [ "$HOOK_EVENT" = "PostToolUseFailure" ]; then
+    echo '{"continue":true}'
+  fi
+  exit 0
+}
+
+block_posttool() {
+  local reason="$1"
+  jq -n --arg reason "$reason" '{decision:"block", reason:$reason}'
+  exit 0
+}
+
 if ! command -v jq >/dev/null 2>&1; then
-  echo '{"continue":true,"systemMessage":"jq missing, skip post tool state sync"}'
-  exit 0
-fi
-
-if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
-  echo '{"continue":true}'
-  exit 0
-fi
-
-STATE_FILE="$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if [ ! -f "$STATE_FILE" ]; then
-  echo '{"continue":true}'
+  if [ "$HOOK_EVENT" = "PostToolUseFailure" ]; then
+    echo '{"continue":true,"systemMessage":"jq missing, skip post tool state sync"}'
+    exit 0
+  fi
   exit 0
 fi
 
 INPUT="$(cat)"
+HOOK_CWD="$(printf '%s' "$INPUT" | jq -r '
+  if (.cwd | type) == "string" and .cwd != "" then
+    .cwd
+  else
+    empty
+  end
+' 2>/dev/null || true)"
+
+resolve_state_root_from_candidate() {
+  local candidate="$1"
+
+  if [ -z "$candidate" ]; then
+    return
+  fi
+
+  local current="$candidate"
+  if [ ! -d "$current" ]; then
+    current="$(dirname "$current")"
+  fi
+
+  if [ ! -d "$current" ]; then
+    return
+  fi
+
+  current="$(cd "$current" 2>/dev/null && pwd -P)" || return
+
+  while :; do
+    if [ -f "$current/.claude/flow_state.json" ]; then
+      printf '%s\n' "$current"
+      return
+    fi
+
+    if [ "$current" = "/" ]; then
+      return
+    fi
+
+    current="$(dirname "$current")"
+  done
+}
+
+resolve_state_root_alias_from_candidate() {
+  local candidate="$1"
+
+  if [ -z "$candidate" ]; then
+    return
+  fi
+
+  local current="$candidate"
+  if [ ! -d "$current" ]; then
+    current="$(dirname "$current")"
+  fi
+
+  if [ ! -d "$current" ]; then
+    return
+  fi
+
+  while :; do
+    if [ -f "$current/.claude/flow_state.json" ]; then
+      printf '%s\n' "$current"
+      return
+    fi
+
+    if [ "$current" = "/" ]; then
+      return
+    fi
+
+    current="$(dirname "$current")"
+  done
+}
+
+resolve_project_dir() {
+  local resolved=""
+
+  resolved="$(resolve_state_root_from_candidate "${CLAUDE_PROJECT_DIR:-}")"
+  if [ -n "$resolved" ]; then
+    printf '%s\n' "$resolved"
+    return
+  fi
+
+  local hook_cwd
+  hook_cwd="$HOOK_CWD"
+
+  resolved="$(resolve_state_root_from_candidate "$hook_cwd")"
+  if [ -n "$resolved" ]; then
+    printf '%s\n' "$resolved"
+  fi
+}
+
+PROJECT_DIR="$(resolve_project_dir)"
+if [ -z "$PROJECT_DIR" ]; then
+  allow_hook
+fi
+
+STATE_FILE="$PROJECT_DIR/.claude/flow_state.json"
+if [ ! -f "$STATE_FILE" ]; then
+  allow_hook
+fi
+
 TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // ""')"
-HOOK_EVENT="${HOOK_EVENT:-PostToolUse}"
 NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
+SPEC_WRITE_RECORDED=false
+PLAN_WRITE_RECORDED=false
+WORKTREE_ADD_RECORDED=false
 
 update_state() {
   local expr="$1"
   jq "$expr" "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
+}
+
+state_is_true() {
+  local jq_expr="$1"
+  jq -e "$jq_expr == true" "$STATE_FILE" >/dev/null 2>&1
 }
 
 append_unique_string_to_array() {
@@ -47,13 +159,36 @@ append_unique_string_to_array() {
 
 normalize_workflow_entry_path() {
   local path="$1"
+  local root_alias
+  local path_physical=""
+  local path_dir=""
+  local path_name=""
 
   while [[ "$path" == ./* ]]; do
     path="${path#./}"
   done
 
-  if [[ "$path" == "$CLAUDE_PROJECT_DIR"/* ]]; then
-    path="${path#"$CLAUDE_PROJECT_DIR"/}"
+  if [[ "$path" = /* ]]; then
+    path_dir="$(dirname "$path")"
+    path_name="${path##*/}"
+    if [ -d "$path_dir" ]; then
+      path_physical="$(cd "$path_dir" 2>/dev/null && pwd -P)/$path_name"
+    fi
+  fi
+
+  for root_alias in \
+    "$PROJECT_DIR" \
+    "$(resolve_state_root_alias_from_candidate "${CLAUDE_PROJECT_DIR:-}")" \
+    "$(resolve_state_root_alias_from_candidate "$HOOK_CWD")"
+  do
+    if [ -n "$root_alias" ] && [[ "$path" == "$root_alias"/* ]]; then
+      path="${path#"$root_alias"/}"
+      break
+    fi
+  done
+
+  if [ -n "$path_physical" ] && [ -n "$PROJECT_DIR" ] && [[ "$path_physical" == "$PROJECT_DIR"/* ]]; then
+    path="${path_physical#"$PROJECT_DIR"/}"
   fi
 
   printf '%s\n' "$path"
@@ -62,6 +197,7 @@ normalize_workflow_entry_path() {
 extract_worktree_path() {
   local command="$1"
   python3 - "$command" <<'PY'
+import os
 import shlex
 import sys
 
@@ -72,12 +208,85 @@ try:
 except ValueError:
     raise SystemExit(1)
 
-try:
-    idx = argv.index("add")
-except ValueError:
+if not argv:
     raise SystemExit(1)
 
-i = idx + 1
+
+def basename(token):
+    return os.path.basename(token)
+
+
+def normalize(tokens):
+    if not tokens:
+        return tokens
+
+    i = 0
+    while i < len(tokens) and "=" in tokens[i] and not tokens[i].startswith("-") and tokens[i].split("=", 1)[0].replace("_", "a").isalnum():
+        i += 1
+    tokens = tokens[i:]
+
+    if tokens and basename(tokens[0]) == "env":
+        i = 1
+        while i < len(tokens) and (
+            tokens[i] == "-i"
+            or tokens[i] == "--"
+            or "=" in tokens[i] and not tokens[i].startswith("-") and tokens[i].split("=", 1)[0].replace("_", "a").isalnum()
+        ):
+            if tokens[i] == "--":
+                i += 1
+                break
+            i += 1
+        tokens = tokens[i:]
+
+    if tokens and basename(tokens[0]) in {"bash", "sh", "zsh"}:
+        for idx, token in enumerate(tokens[1:], start=1):
+            if token == "--":
+                break
+            if token.startswith("-") and "c" in token[1:]:
+                if idx + 1 >= len(tokens):
+                    raise SystemExit(1)
+                try:
+                    return normalize(shlex.split(tokens[idx + 1]))
+                except ValueError:
+                    raise SystemExit(1)
+        return tokens
+
+    return tokens
+
+
+def strip_leading_shell_chain(tokens):
+    shell_chain_ops = {"&&", ";", "||", "&"}
+
+    while True:
+        if len(tokens) >= 4 and tokens[0] == "cd" and tokens[2] in shell_chain_ops:
+            tokens = tokens[3:]
+            continue
+        return tokens
+
+
+argv = normalize(argv)
+argv = strip_leading_shell_chain(argv)
+if len(argv) < 3:
+    raise SystemExit(1)
+if basename(argv[0]) != "git":
+    raise SystemExit(1)
+
+i = 1
+git_flags_with_values = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
+while i < len(argv):
+    token = argv[i]
+    if token in git_flags_with_values:
+        i += 2
+        continue
+    if any(token.startswith(f"{flag}=") for flag in {"--git-dir", "--work-tree", "--namespace"}):
+        i += 1
+        continue
+    break
+
+if i + 1 >= len(argv) or argv[i] != "worktree" or argv[i + 1] != "add":
+    raise SystemExit(1)
+
+i += 2
 while i < len(argv):
     token = argv[i]
     if token in {"-b", "-B", "--branch", "--reason"}:
@@ -1118,6 +1327,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
         | .workflow.activated_at = $now
       ' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
+      SPEC_WRITE_RECORDED=true
     fi
 
     if echo "$NORMALIZED_FILE_PATH" | grep -qE '^docs/superpowers/plans/.*\.md$'; then
@@ -1130,6 +1340,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
         | .workflow.activated_at = $now
       ' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
+      PLAN_WRITE_RECORDED=true
     fi
 
     if echo "$FILE_PATH" | grep -qE '(^|/)(test|tests|spec|__tests__)/|\.test\.|\.spec\.|_test\.|_spec\.'; then
@@ -1144,6 +1355,7 @@ if [ "$TOOL_NAME" = "Bash" ]; then
   COMMAND="$(echo "$INPUT" | jq -r '.tool_input.command // ""')"
   RESULT_TEXT="$(echo "$INPUT" | jq -r '.tool_result | if . == null then "" elif type == "string" then . else tostring end')"
   DEBUGGING_ACTIVE="$(jq -r '.debugging.active // false' "$STATE_FILE")"
+  WORKTREE_PATH="$(extract_worktree_path "$COMMAND" || true)"
 
   if [ "$HOOK_EVENT" = "PostToolUseFailure" ]; then
     FAILURE_ROUTE="$(classify_failure_test_command "$COMMAND")"
@@ -1173,14 +1385,11 @@ if [ "$TOOL_NAME" = "Bash" ]; then
     fi
   fi
 
-  if echo "$COMMAND" | grep -q 'git worktree add'; then
+  if [ -n "$WORKTREE_PATH" ]; then
     if ! echo "$RESULT_TEXT" | grep -qiE '^[[:space:]]*(fatal:|error:)'; then
-      WORKTREE_PATH="$(extract_worktree_path "$COMMAND" || true)"
-      if [ -z "$WORKTREE_PATH" ]; then
-        WORKTREE_PATH="unknown"
-      fi
       jq --arg path "$WORKTREE_PATH" '.current_phase = "worktree" | .worktree.created = true | .worktree.path = $path | .worktree.baseline_verified = false' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
+      WORKTREE_ADD_RECORDED=true
     fi
   fi
 
@@ -1194,4 +1403,18 @@ if [ "$TOOL_NAME" = "Bash" ]; then
   fi
 fi
 
-echo '{"continue":true}'
+if [ "$HOOK_EVENT" = "PostToolUse" ]; then
+  if [ "$SPEC_WRITE_RECORDED" = "true" ] && ! state_is_true '.brainstorming.spec_reviewed'; then
+    block_posttool "SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。"
+  fi
+
+  if [ "$PLAN_WRITE_RECORDED" = "true" ] && ! state_is_true '.worktree.created'; then
+    block_posttool "Plan 已写完，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。"
+  fi
+
+  if [ "$WORKTREE_ADD_RECORDED" = "true" ] && ! state_is_true '.worktree.baseline_verified'; then
+    block_posttool "Worktree 已创建，必须先完成 setup 和 baseline verification。"
+  fi
+fi
+
+allow_hook

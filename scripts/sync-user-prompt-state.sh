@@ -2,19 +2,55 @@
 set -euo pipefail
 
 if ! command -v jq >/dev/null 2>&1; then
-  echo '{"continue":true,"systemMessage":"jq missing, skip user prompt state sync"}'
   exit 0
 fi
 
 INPUT="$(cat)"
 
 if ! printf '%s' "$INPUT" | jq empty >/dev/null 2>&1; then
-  echo '{"continue":true}'
   exit 0
 fi
 
+resolve_state_root_from_candidate() {
+  local candidate="$1"
+  if [ -z "$candidate" ]; then
+    return
+  fi
+
+  local current="$candidate"
+  if [ ! -d "$current" ]; then
+    current="$(dirname "$current")"
+  fi
+
+  if [ ! -d "$current" ]; then
+    return
+  fi
+
+  current="$(cd "$current" 2>/dev/null && pwd -P)" || return
+
+  while :; do
+    if [ -f "$current/.claude/flow_state.json" ]; then
+      printf '%s\n' "$current"
+      return
+    fi
+
+    if [ "$current" = "/" ]; then
+      return
+    fi
+
+    current="$(dirname "$current")"
+  done
+}
+
 resolve_project_dir() {
   if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    local resolved
+    resolved="$(resolve_state_root_from_candidate "$CLAUDE_PROJECT_DIR")"
+    if [ -n "$resolved" ]; then
+      printf '%s\n' "$resolved"
+      return
+    fi
+
     printf '%s\n' "$CLAUDE_PROJECT_DIR"
     return
   fi
@@ -28,6 +64,13 @@ resolve_project_dir() {
     end
   ' 2>/dev/null || true)"
   if [ -n "$hook_cwd" ]; then
+    local resolved
+    resolved="$(resolve_state_root_from_candidate "$hook_cwd")"
+    if [ -n "$resolved" ]; then
+      printf '%s\n' "$resolved"
+      return
+    fi
+
     printf '%s\n' "$hook_cwd"
     return
   fi
@@ -73,7 +116,7 @@ record_interrupt_if_requested() {
 
 normalize_confirmation_phase() {
   case "$1" in
-    test|测试)
+    tdd|test|测试)
       echo "tdd"
       ;;
     *)
@@ -82,10 +125,22 @@ normalize_confirmation_phase() {
   esac
 }
 
+emit_skip_block_json() {
+  local guidance_phase="$1"
+  if [ "$guidance_phase" = "tdd" ]; then
+    guidance_phase="tdd（或 test/测试）"
+  fi
+
+  jq -n --arg phase "$guidance_phase" '{
+    decision: "block",
+    reason: ("检测到跳过流程请求。请先明确确认：确认跳过 " + $phase + "。确认后可选补充原因。")
+  }'
+}
+
 confirmation_phase=""
-if [[ "$PROMPT_LC" =~ ^confirm[[:space:]]+skip[[:space:]]+(brainstorming|planning|tdd|test|review|finishing)$ ]]; then
+if [[ "$PROMPT_LC" =~ ^confirm[[:space:]]+skip[[:space:]]+(brainstorming|planning|tdd|test|review|finishing)([[:space:]].*)?$ ]]; then
   confirmation_phase="$(normalize_confirmation_phase "${BASH_REMATCH[1]}")"
-elif [[ "$PROMPT_LC" =~ ^确认跳过[[:space:]]*(brainstorming|planning|测试|review|finishing)$ ]]; then
+elif [[ "$PROMPT_LC" =~ ^确认跳过[[:space:]]*(brainstorming|planning|tdd|test|测试|review|finishing)([[:space:]].*)?$ ]]; then
   confirmation_phase="$(normalize_confirmation_phase "${BASH_REMATCH[1]}")"
 fi
 
@@ -98,7 +153,6 @@ if [ -n "$confirmation_phase" ]; then
 
   record_interrupt_if_requested
 
-  echo '{"continue":true}'
   exit 0
 fi
 
@@ -132,8 +186,17 @@ if [ -n "$phase" ]; then
     | .workflow.activated_at = $now
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
+
+  record_interrupt_if_requested
+
+  pending_after_skip="$(jq -r '.exceptions.pending_confirmation_for // ""' "$STATE_FILE" 2>/dev/null || true)"
+  user_confirmed_after_skip="$(jq -r '.exceptions.user_confirmed // false' "$STATE_FILE" 2>/dev/null || true)"
+  if [ "$pending_after_skip" != "$phase" ] || [ "$user_confirmed_after_skip" != "true" ]; then
+    emit_skip_block_json "$phase"
+    exit 0
+  fi
 fi
 
 record_interrupt_if_requested
 
-echo '{"continue":true}'
+exit 0
