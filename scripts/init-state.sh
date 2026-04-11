@@ -100,8 +100,14 @@ if [ -f "$STATE_FILE" ]; then
     exit 0
   fi
 
-  if [ "$(jq -r 'if (.workflow | type) == "object" then "present" else "missing" end' "$STATE_FILE")" = "missing" ]; then
+  WORKFLOW_TYPE="$(jq -r 'if has("workflow") then (.workflow | type) else "missing" end' "$STATE_FILE")"
+
+  if [ "$WORKFLOW_TYPE" = "missing" ]; then
     normalize_workflow_state
+  elif [ "$WORKFLOW_TYPE" != "object" ]; then
+    backup_and_reset_state
+    echo "{\"continue\": true, \"systemMessage\": \"Flow state backed up and reset at $STATE_FILE\"}"
+    exit 0
   fi
 
   echo '{"continue": true, "systemMessage": "Flow state file exists and valid"}'

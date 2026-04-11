@@ -52,6 +52,20 @@ assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
 
+write_v2_state_with_broken_workflow "$SESSION_CWD/.claude/flow_state.json"
+export CLAUDE_PROJECT_DIR="$SESSION_CWD"
+cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow.original"
+
+if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+  echo "Expected init-state.sh to recover from unsafe v2 workflow scalar" >&2
+  cat /tmp/test-init-state.err >&2
+  exit 1
+fi
+
+assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_backup_matches_original "$TMP_DIR/unsafe-workflow.original" "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
+
 export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 
 mkdir -p "$CLAUDE_PROJECT_DIR/.claude"
