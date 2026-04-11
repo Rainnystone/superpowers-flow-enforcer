@@ -6,20 +6,48 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 0
 fi
 
-if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
-  echo '{"continue":true}'
-  exit 0
-fi
-
-STATE_FILE="$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if [ ! -f "$STATE_FILE" ]; then
-  echo '{"continue":true}'
-  exit 0
-fi
-
 INPUT="$(cat)"
-USER_PROMPT="$(echo "$INPUT" | jq -r '.user_prompt // ""')"
-PROMPT_LC="$(echo "$USER_PROMPT" | tr '[:upper:]' '[:lower:]')"
+
+resolve_project_dir() {
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    printf '%s\n' "$CLAUDE_PROJECT_DIR"
+    return
+  fi
+
+  local hook_cwd
+  hook_cwd="$(printf '%s' "$INPUT" | jq -r '
+    if (.cwd | type) == "string" and .cwd != "" then
+      .cwd
+    else
+      empty
+    end
+  ' 2>/dev/null || true)"
+  if [ -n "$hook_cwd" ]; then
+    printf '%s\n' "$hook_cwd"
+    return
+  fi
+
+  printf '%s\n' "$PWD"
+}
+
+PROJECT_DIR="$(resolve_project_dir)"
+STATE_FILE="$PROJECT_DIR/.claude/flow_state.json"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+INIT_STATE_SCRIPT="$SCRIPT_DIR/init-state.sh"
+
+bootstrap_state_if_missing() {
+  if [ -f "$STATE_FILE" ]; then
+    return
+  fi
+
+  printf '%s' "$INPUT" | CLAUDE_PROJECT_DIR="$PROJECT_DIR" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$INIT_STATE_SCRIPT" >/dev/null
+}
+
+bootstrap_state_if_missing
+
+USER_PROMPT="$(printf '%s' "$INPUT" | jq -r '.prompt // ""' 2>/dev/null || true)"
+PROMPT_LC="$(printf '%s' "$USER_PROMPT" | tr '[:upper:]' '[:lower:]')"
 NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
 
@@ -75,7 +103,7 @@ elif echo "$PROMPT_LC" | grep -qE 'skip[[:space:]]+finishing|跳过[[:space:]]*f
 fi
 
 if [ -n "$phase" ]; then
-  jq --arg phase "$phase" --arg reason "$USER_PROMPT" '
+  jq --arg phase "$phase" --arg reason "$USER_PROMPT" --arg now "$NOW_UTC" '
     .exceptions.skip_brainstorming = false
     | .exceptions.skip_planning = false
     | .exceptions.skip_tdd = false
@@ -86,6 +114,9 @@ if [ -n "$phase" ]; then
     | .exceptions.reason = $reason
     | .exceptions.user_confirmed = false
     | .exceptions.confirmed_at = null
+    | .workflow.active = true
+    | .workflow.activated_by = "user_prompt_skip"
+    | .workflow.activated_at = $now
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
 fi
