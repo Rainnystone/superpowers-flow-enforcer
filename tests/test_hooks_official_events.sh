@@ -33,6 +33,7 @@ import sys
 
 task_prompt = os.environ['TASK_COMPLETED_PROMPT']
 stop_prompts = os.environ['STOP_PROMPTS'].splitlines()
+first_stop_prompt, second_stop_prompt = stop_prompts
 
 required_task_checks = [
     'review.tasks[task_id].spec_review_passed',
@@ -48,12 +49,16 @@ if 'review.tasks[task_id] is missing or not fully passed' in task_prompt:
     sys.stderr.write('Expected TaskCompleted to stop using the generic review.tasks[task_id] gate\n')
     raise SystemExit(1)
 
+if 'If workflow.active is not true, return {"continue": true}' not in task_prompt:
+    sys.stderr.write('Expected TaskCompleted to allow completion when workflow.active is not true\n')
+    raise SystemExit(1)
+
 if not any('interrupt.allowed' in prompt for prompt in stop_prompts):
     sys.stderr.write('Expected Stop to check interrupt.allowed\n')
     raise SystemExit(1)
 
-if not any('fresh passing verification evidence' in prompt for prompt in stop_prompts):
-    sys.stderr.write('Expected Stop to require fresh passing verification evidence\n')
+if 'completion keywords appear' not in first_stop_prompt or 'fresh passing verification evidence' not in first_stop_prompt:
+    sys.stderr.write('Expected first Stop prompt to require transcript-based fresh passing verification evidence\n')
     raise SystemExit(1)
 
 if not any('finishing.invoked' in prompt for prompt in stop_prompts):
@@ -63,15 +68,27 @@ if not any('finishing.invoked' in prompt for prompt in stop_prompts):
 if any('finishing.skill_invoked' in prompt for prompt in stop_prompts):
     sys.stderr.write('Expected Stop to stop referencing finishing.skill_invoked\n')
     raise SystemExit(1)
+
+required_second_stop_checks = [
+    'If state file is missing or unreadable, return {"decision": "approve"}',
+    'If workflow.active is not true, return {"decision": "approve"}',
+]
+
+missing_second_stop = [needle for needle in required_second_stop_checks if needle not in second_stop_prompt]
+if missing_second_stop:
+    sys.stderr.write('Expected second Stop prompt to safely approve when workflow state is unavailable or inactive: ' + ', '.join(missing_second_stop) + '\n')
+    raise SystemExit(1)
 PY
 
 planning_prompt="$(jq -r '.hooks.PreToolUse[] | select(.matcher == "Edit|Write") | .hooks[0].prompt' hooks/hooks.json)"
+ask_user_question_prompt="$(jq -r '.hooks.PreToolUse[] | select(.matcher == "AskUserQuestion") | .hooks[0].prompt' hooks/hooks.json)"
 
-PLANNING_PROMPT="$planning_prompt" python3 - <<'PY'
+PLANNING_PROMPT="$planning_prompt" ASK_USER_QUESTION_PROMPT="$ask_user_question_prompt" python3 - <<'PY'
 import os
 import sys
 
 prompt = os.environ['PLANNING_PROMPT']
+ask_prompt = os.environ['ASK_USER_QUESTION_PROMPT']
 
 try:
     plan_branch_index = prompt.index('If path matches docs/superpowers/plans/*.md')
@@ -105,6 +122,36 @@ if missing:
 
 if 'skip_brainstorming' in plan_branch:
     sys.stderr.write('Expected plan-file gate to avoid skip_brainstorming in the plan branch\n')
+    raise SystemExit(1)
+
+required_workflow_entry_allows = [
+    'docs/superpowers/specs/*.md',
+    'docs/superpowers/plans/*.md',
+]
+
+missing_entry_allows = [needle for needle in required_workflow_entry_allows if needle not in prompt]
+if missing_entry_allows:
+    sys.stderr.write('Expected production-write prompt to explicitly allow canonical workflow-entry artifacts: ' + ', '.join(missing_entry_allows) + '\n')
+    raise SystemExit(1)
+
+try:
+    specs_allow_index = prompt.index('docs/superpowers/specs/*.md')
+    plans_allow_index = prompt.index('docs/superpowers/plans/*.md')
+    workflow_active_index = prompt.index('If workflow.active is not true, return allow')
+except ValueError:
+    sys.stderr.write('Expected production-write prompt to exempt canonical workflow-entry artifacts before gating on workflow.active\n')
+    raise SystemExit(1)
+
+if not (specs_allow_index < workflow_active_index and plans_allow_index < workflow_active_index):
+    sys.stderr.write('Expected workflow.active gate to run only after canonical workflow-entry artifact exemptions\n')
+    raise SystemExit(1)
+
+if 'If workflow.active is not true, return allow' not in prompt:
+    sys.stderr.write('Expected production-write prompt to allow writes when workflow.active is not true\n')
+    raise SystemExit(1)
+
+if 'If workflow.active is not true, return {"continue": true}' not in ask_prompt:
+    sys.stderr.write('Expected AskUserQuestion gate to allow when workflow.active is not true\n')
     raise SystemExit(1)
 
 try:
