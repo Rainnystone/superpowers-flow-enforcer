@@ -2,7 +2,7 @@
 
 English | [中文](./README_cn.md)
 
-A Claude Code plugin that supplements [obra/superpowers](https://github.com/obra/superpowers) by enforcing workflow-aware hooks after a session explicitly enters the superpowers workflow. It is not a replacement, and this repo is designed to be used together with [planning-with-files](https://github.com/othmanadi/planning-with-files) for external memory.
+A Claude Code plugin that acts as a supplement to [obra/superpowers](https://github.com/obra/superpowers) by enforcing workflow-aware hooks after a session explicitly enters the superpowers workflow. It is not a replacement, and this repo is designed to be used together with [planning-with-files](https://github.com/othmanadi/planning-with-files) for external memory.
 
 ## Overview
 
