@@ -90,8 +90,18 @@ import sys
 prompt = os.environ['PLANNING_PROMPT']
 ask_prompt = os.environ['ASK_USER_QUESTION_PROMPT']
 
+required_normalization_intro = (
+    'Normalize candidate file paths by treating repo-relative, leading ./, '
+    'and project-root absolute forms consistently before matching '
+    'docs/superpowers/specs/*.md and docs/superpowers/plans/*.md'
+)
+
+if required_normalization_intro not in prompt:
+    sys.stderr.write('Expected PreToolUse prompt to describe normalized path handling for workflow-entry artifacts and plan/spec gates\n')
+    raise SystemExit(1)
+
 try:
-    plan_branch_index = prompt.index('If path matches docs/superpowers/plans/*.md')
+    plan_branch_index = prompt.index('If normalized path matches docs/superpowers/plans/*.md')
     docs_allow_index = prompt.index('If path matches docs/config/type/generated exceptions ')
 except IndexError:
     sys.stderr.write('Expected the planning prompt to contain both plan-file and broad docs branches\n')
@@ -124,6 +134,18 @@ if 'skip_brainstorming' in plan_branch:
     sys.stderr.write('Expected plan-file gate to avoid skip_brainstorming in the plan branch\n')
     raise SystemExit(1)
 
+required_normalized_plan_checks = [
+    'normalized path matches docs/superpowers/plans/*.md',
+    'repo-relative',
+    'leading ./',
+    'project-root absolute',
+]
+
+missing_normalized_plan = [needle for needle in required_normalized_plan_checks if needle not in plan_branch]
+if missing_normalized_plan:
+    sys.stderr.write('Expected planning gate to describe normalized path matching: ' + ', '.join(missing_normalized_plan) + '\n')
+    raise SystemExit(1)
+
 required_workflow_entry_allows = [
     'docs/superpowers/specs/*.md',
     'docs/superpowers/plans/*.md',
@@ -135,7 +157,7 @@ if missing_entry_allows:
     raise SystemExit(1)
 
 try:
-    artifact_entry_branch = 'If path matches canonical workflow-entry artifacts docs/superpowers/specs/*.md or docs/superpowers/plans/*.md and workflow.active is not true, return allow'
+    artifact_entry_branch = 'If normalized path matches docs/superpowers/specs/*.md or docs/superpowers/plans/*.md'
     artifact_entry_index = prompt.index(artifact_entry_branch)
     workflow_active_index = prompt.index('If workflow.active is not true, return allow')
 except ValueError:
@@ -153,8 +175,10 @@ if 'If workflow.active is not true, return allow' not in prompt:
 artifact_entry_segment = prompt[artifact_entry_index:workflow_active_index]
 
 required_entry_branch_content = [
-    'docs/superpowers/specs/*.md',
-    'docs/superpowers/plans/*.md',
+    'normalized path matches docs/superpowers/specs/*.md or docs/superpowers/plans/*.md',
+    'repo-relative',
+    'leading ./',
+    'project-root absolute',
     'workflow.active is not true',
     'return allow',
 ]
