@@ -45,6 +45,20 @@ append_unique_string_to_array() {
   mv "$tmp_file" "$STATE_FILE"
 }
 
+normalize_workflow_entry_path() {
+  local path="$1"
+
+  while [[ "$path" == ./* ]]; do
+    path="${path#./}"
+  done
+
+  if [[ "$path" == "$CLAUDE_PROJECT_DIR"/* ]]; then
+    path="${path#"$CLAUDE_PROJECT_DIR"/}"
+  fi
+
+  printf '%s\n' "$path"
+}
+
 extract_worktree_path() {
   local command="$1"
   python3 - "$command" <<'PY'
@@ -1087,12 +1101,14 @@ fi
 if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
   FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // ""')"
   if [ -n "$FILE_PATH" ]; then
+    NORMALIZED_FILE_PATH="$(normalize_workflow_entry_path "$FILE_PATH")"
+
     if [ "$(basename "$FILE_PATH")" = "findings.md" ]; then
       jq --arg now "$NOW_UTC" '.current_phase = "brainstorming" | .brainstorming.findings_updated_after_question = true | .brainstorming.findings_last_update = $now' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
     fi
 
-    if echo "$FILE_PATH" | grep -qE '^docs/superpowers/specs/.*\.md$'; then
+    if echo "$NORMALIZED_FILE_PATH" | grep -qE '^docs/superpowers/specs/.*\.md$'; then
       jq --arg path "$FILE_PATH" --arg now "$NOW_UTC" '
         .current_phase = "brainstorming"
         | .brainstorming.spec_written = true
@@ -1104,7 +1120,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
       mv "$tmp_file" "$STATE_FILE"
     fi
 
-    if echo "$FILE_PATH" | grep -qE '^docs/superpowers/plans/.*\.md$'; then
+    if echo "$NORMALIZED_FILE_PATH" | grep -qE '^docs/superpowers/plans/.*\.md$'; then
       jq --arg path "$FILE_PATH" --arg now "$NOW_UTC" '
         .current_phase = "planning"
         | .planning.plan_written = true
