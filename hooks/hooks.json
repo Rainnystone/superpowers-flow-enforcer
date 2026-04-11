@@ -23,8 +23,8 @@
             "timeout": 10
           },
           {
-            "type": "prompt",
-            "prompt": "Read $USER_PROMPT and state file at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If user asks to skip brainstorming/tdd/review/finishing and exceptions.user_confirmed is not true, return {\"continue\": false, \"systemMessage\": \"检测到跳过流程请求。请先明确确认：确认跳过 <phase>，并给出原因。\"}. Otherwise return {\"continue\": true}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON derive the state path (for example from cwd) and read the referenced state file. If state file is missing or unreadable, do not block on that basis and return {\"ok\": true}. Check the submitted user prompt text from $ARGUMENTS. If user asks to skip brainstorming/tdd/review/finishing and exceptions.user_confirmed is not true, return {\"ok\": false, \"reason\": \"检测到跳过流程请求。请先明确确认：确认跳过 <phase>，并给出原因。\"}. Otherwise return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -35,8 +35,8 @@
         "matcher": "Edit|Write",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Enforce workflow gates in this order: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/specs/*.md and docs/superpowers/plans/*.md. (1) If file_path is exactly .claude/flow_state.json, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"禁止直接手改 flow_state.json，请通过 hooks 自动推进状态。\"}. (2) If normalized path matches docs/superpowers/specs/*.md or docs/superpowers/plans/*.md after treating repo-relative, leading ./, and project-root absolute forms consistently and workflow.active is not true, return allow. (3) If workflow.active is not true, return allow. (4) If normalized path matches docs/superpowers/plans/*.md after treating repo-relative, leading ./, and project-root absolute forms consistently and not (exceptions.skip_planning and exceptions.user_confirmed), deny unless brainstorming.spec_reviewed is true and brainstorming.user_approved_spec is true; only skip_planning may bypass this gate. If path matches docs/config/type/generated exceptions (*.md, docs/*, *.json, *.yaml, *.yml, *.config.*, .env*, *.d.ts, types/*.ts, *.types.ts, dist/*, build/*, docs/superpowers/specs/*), return allow. (5) For any code/test write outside above exceptions: if brainstorming.spec_written is not true and not (exceptions.skip_brainstorming and exceptions.user_confirmed), deny with message requiring brainstorming/SPEC first. (6) If exceptions.skip_tdd and exceptions.user_confirmed are true, return allow. (7) If worktree.created is false or worktree.baseline_verified is false, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"TDD 之前必须先用 record-worktree-state.sh 记录 worktree.created 和 worktree.baseline_verified。\"}. (8) If path is test-like (contains test/tests/spec/__tests__ or name has .test. .spec. _test. _spec.), return allow. (9) If tdd.pending_failure_record is true, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"检测到待记录的失败测试目标。先运行 record-tdd-state.sh fail <target>，再继续修改生产代码。\"}. (10) Otherwise treat as production file: infer candidate tests (same basename with .test/.spec). If no candidate appears in tdd.tests_verified_fail, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST. 先写测试并运行到失败。\"}. Else return allow.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON extract file_path, derive the state path, and read the referenced state file. Enforce workflow gates in this order: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/specs/*.md and docs/superpowers/plans/*.md. (1) If file_path is exactly .claude/flow_state.json, return {\"ok\": false, \"reason\": \"禁止直接手改 flow_state.json，请通过 hooks 自动推进状态。\"}. (2) If normalized path matches docs/superpowers/specs/*.md or docs/superpowers/plans/*.md after treating repo-relative, leading ./, and project-root absolute forms consistently and workflow.active is not true, return {\"ok\": true}. (3) If workflow.active is not true, return {\"ok\": true}. (4) If normalized path matches docs/superpowers/plans/*.md after treating repo-relative, leading ./, and project-root absolute forms consistently and not (exceptions.skip_planning and exceptions.user_confirmed) and (brainstorming.spec_reviewed is not true or brainstorming.user_approved_spec is not true), return {\"ok\": false, \"reason\": \"写入计划前必须先完成 spec review 并获得用户批准；only skip_planning may bypass this gate.\"}. If path matches docs/config/type/generated exceptions (*.md, docs/*, *.json, *.yaml, *.yml, *.config.*, .env*, *.d.ts, types/*.ts, *.types.ts, dist/*, build/*, docs/superpowers/specs/*), return {\"ok\": true}. (5) For any code/test write outside above exceptions: if brainstorming.spec_written is not true and not (exceptions.skip_brainstorming and exceptions.user_confirmed), return {\"ok\": false, \"reason\": \"需要先完成 brainstorming/SPEC。\"}. (6) If exceptions.skip_tdd and exceptions.user_confirmed are true, return {\"ok\": true}. (7) If worktree.created is false or worktree.baseline_verified is false, return {\"ok\": false, \"reason\": \"TDD 之前必须先用 record-worktree-state.sh 记录 worktree.created 和 worktree.baseline_verified。\"}. (8) If path is test-like (contains test/tests/spec/__tests__ or name has .test. .spec. _test. _spec.), return {\"ok\": true}. (9) If tdd.pending_failure_record is true, return {\"ok\": false, \"reason\": \"检测到待记录的失败测试目标。先运行 record-tdd-state.sh fail <target>，再继续修改生产代码。\"}. (10) Otherwise treat as production file: infer candidate tests (same basename with .test/.spec). If no candidate appears in tdd.tests_verified_fail, return {\"ok\": false, \"reason\": \"NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST. 先写测试并运行到失败。\"}. Else return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -45,8 +45,8 @@
         "matcher": "AskUserQuestion",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If workflow.active is not true, return {\"continue\": true}. If current_phase is brainstorming and brainstorming.question_asked is true, and brainstorming.findings_updated_after_question is false, return {\"continue\": false, \"systemMessage\": \"Brainstorming 阶段每次提问后必须更新 findings.md。\"}. Otherwise return {\"continue\": true}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON derive the state path and read the referenced state file. If workflow.active is not true, return {\"ok\": true}. If current_phase is brainstorming and brainstorming.question_asked is true and brainstorming.findings_updated_after_question is false, return {\"ok\": false, \"reason\": \"Brainstorming 阶段每次提问后必须更新 findings.md。\"}. Otherwise return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.command. If command directly reads/writes .claude/flow_state.json and does NOT call ${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"禁止直接操作 flow_state.json，请通过 update-state.sh。\"}. Else return {\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}.",
+            "prompt": "Parse $ARGUMENTS as JSON and read command from the hook input. If command directly reads/writes .claude/flow_state.json and does NOT call ${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh, return {\"ok\": false, \"reason\": \"禁止直接操作 flow_state.json，请通过 update-state.sh。\"}. Else return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -77,8 +77,8 @@
         "matcher": "Write|Edit",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Use the same normalized path semantics as sync-post-tool-state.sh: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/specs/*.md. If normalized path matches docs/superpowers/specs/*.md and brainstorming.spec_self_reviewed is false, return {\"continue\": false, \"systemMessage\": \"SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。\"}. Else return {\"continue\": true}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON extract file_path, derive the state path, and read the referenced state file. Use the same normalized path semantics as sync-post-tool-state.sh: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/specs/*.md. If normalized path matches docs/superpowers/specs/*.md and brainstorming.spec_self_reviewed is false, return {\"ok\": false, \"reason\": \"SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。\"}. Else return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -87,8 +87,8 @@
         "matcher": "Write",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Use the same normalized path semantics as sync-post-tool-state.sh: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/plans/*.md. If normalized path matches docs/superpowers/plans/*.md and worktree.created is false, return {\"continue\": false, \"systemMessage\": \"Plan 已写完，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。\"}. Else return {\"continue\": true}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON extract file_path, derive the state path, and read the referenced state file. Use the same normalized path semantics as sync-post-tool-state.sh: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/plans/*.md. If normalized path matches docs/superpowers/plans/*.md and worktree.created is false, return {\"ok\": false, \"reason\": \"Plan 已写完，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。\"}. Else return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -97,8 +97,8 @@
         "matcher": "Bash",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.command and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If command contains 'git worktree add' and worktree.baseline_verified is false, return {\"continue\": false, \"systemMessage\": \"Worktree 已创建，必须先完成 setup 和 baseline verification。\"}. Else return {\"continue\": true}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON read command input, derive the state path, and read the referenced state file. If command contains 'git worktree add' and worktree.baseline_verified is false, return {\"ok\": false, \"reason\": \"Worktree 已创建，必须先完成 setup 和 baseline verification。\"}. Else return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -107,8 +107,8 @@
         "matcher": "TaskCompleted",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read $TOOL_INPUT and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If workflow.active is not true, return {\"continue\": true}. If task status is completed and review.tasks[task_id].spec_review_passed is not true or review.tasks[task_id].code_review_passed is not true, return {\"continue\": false, \"systemMessage\": \"Task 标记完成前，必须完成两阶段 review。\"}. Otherwise return {\"continue\": true}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON derive the state path and read the referenced state file. Also extract task identity (task_id) and completion status from the hook input JSON in $ARGUMENTS before evaluating review gates. If workflow.active is not true, return {\"ok\": true}. If task status is completed and (review.tasks[task_id].spec_review_passed is not true or review.tasks[task_id].code_review_passed is not true), return {\"ok\": false, \"reason\": \"Task 标记完成前，必须完成两阶段 review。\"}. Otherwise return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -131,8 +131,8 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read transcript at $TRANSCRIPT_PATH. Try to read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If state file is readable and stop_hook_active is true, return {\"decision\": \"approve\"}. If state file is readable and interrupt.allowed is true, return {\"decision\": \"approve\", \"systemMessage\": \"Interrupt recorded.\"}. If state file is missing or unreadable, ignore state-based checks here and only evaluate transcript-based completion evidence. Otherwise if completion keywords appear (done/complete/tests pass/fixed/working/完成/修复) but no fresh passing verification evidence in the latest context, return {\"decision\": \"block\", \"reason\": \"Completion claimed without fresh verification evidence. Run verification now and show output.\"}. Else return {\"decision\": \"approve\"}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON derive the transcript path and derive the state path, then read the referenced transcript file and read the referenced state file before deciding. If state file is readable and stop_hook_active is true, return {\"ok\": true}. If state file is readable and interrupt.allowed is true, return {\"ok\": true}. If state file is missing or unreadable, ignore state-based checks here and only evaluate transcript-based completion evidence. Otherwise if completion keywords appear (done/complete/tests pass/fixed/working/完成/修复) but no fresh passing verification evidence in the latest context, return {\"ok\": false, \"reason\": \"Completion claimed without fresh verification evidence. Run verification now and show output.\"}. Else return {\"ok\": true}.",
             "timeout": 30
           }
         ]
@@ -141,8 +141,8 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If state file is missing or unreadable, return {\"decision\": \"approve\"}. If workflow.active is not true, return {\"decision\": \"approve\"}. If stop_hook_active is true, return {\"decision\": \"approve\"}. If interrupt.allowed is true, return {\"decision\": \"approve\"}. If review.tasks is empty and not (exceptions.skip_review and exceptions.user_confirmed), return {\"decision\": \"block\", \"reason\": \"还没有 review 记录，先执行 requesting-code-review 的两阶段评审。\"}. If all tasks in review.tasks are fully passed and finishing.invoked is false and not (exceptions.skip_finishing and exceptions.user_confirmed), return {\"decision\": \"block\", \"reason\": \"所有任务都已 review，通过后还需执行 finishing-a-development-branch。\"}. Otherwise return {\"decision\": \"approve\"}.",
+            "type": "agent",
+            "prompt": "Parse $ARGUMENTS as JSON. From that JSON derive the state path, then read the referenced state file before deciding. If state file is missing or unreadable, return {\"ok\": true}. If workflow.active is not true, return {\"ok\": true}. If stop_hook_active is true, return {\"ok\": true}. If interrupt.allowed is true, return {\"ok\": true}. If review.tasks is empty and not (exceptions.skip_review and exceptions.user_confirmed), return {\"ok\": false, \"reason\": \"还没有 review 记录，先执行 requesting-code-review 的两阶段评审。\"}. If all tasks in review.tasks are fully passed and finishing.invoked is false and not (exceptions.skip_finishing and exceptions.user_confirmed), return {\"ok\": false, \"reason\": \"所有任务都已 review，通过后还需执行 finishing-a-development-branch。\"}. Otherwise return {\"ok\": true}.",
             "timeout": 30
           }
         ]

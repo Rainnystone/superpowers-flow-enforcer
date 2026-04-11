@@ -81,6 +81,28 @@ if [ "$(jq -c '.workflow.activated_at' "$SELF_HEAL_PROJECT/.claude/flow_state.js
   exit 1
 fi
 
+BROKEN_PROJECT="$TMP_DIR/project-broken-state"
+mkdir -p "$BROKEN_PROJECT/.claude"
+printf '{"state_version":2,' > "$BROKEN_PROJECT/.claude/flow_state.json"
+
+set +e
+BROKEN_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip planning"}' "$BROKEN_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+BROKEN_STATUS=$?
+set -e
+
+if [ "$BROKEN_STATUS" -ne 0 ]; then
+  echo "Expected exit 0 on malformed state, got $BROKEN_STATUS" >&2
+  exit 1
+fi
+
+if [ -n "$BROKEN_OUTPUT" ] && ! printf '%s' "$BROKEN_OUTPUT" | jq empty >/dev/null 2>&1; then
+  echo "Expected empty stdout or valid JSON on malformed state path" >&2
+  exit 1
+fi
+
 NOOP_PWD="$TMP_DIR/pwd-noop"
 mkdir -p "$NOOP_PWD"
 (
