@@ -1,9 +1,15 @@
 {
   "name": "superpowers-flow-enforcer-marketplace",
-  "plugins": {
-    "superpowers-flow-enforcer": {
-      "version": "1.0.0",
-      "path": "."
+  "owner": {
+    "name": "Rainnystone"
+  },
+  "plugins": [
+    {
+      "name": "superpowers-flow-enforcer",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/Rainnystone/superpowers-flow-enforcer.git"
+      }
     }
-  }
+  ]
 }
