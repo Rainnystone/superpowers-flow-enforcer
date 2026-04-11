@@ -16,6 +16,9 @@ assert_fresh_v2_state() {
   assert_json_equals "$file" '.worktree.baseline_verified' 'false'
   assert_json_equals "$file" '.tdd.pending_failure_record' 'false'
   assert_json_equals "$file" '.tdd.last_failed_command' 'null'
+  assert_json_equals "$file" '.workflow.active' 'false'
+  assert_json_equals "$file" '.workflow.activated_by' 'null'
+  assert_json_equals "$file" '.workflow.activated_at' 'null'
 }
 
 assert_backup_matches_original() {
@@ -26,8 +29,30 @@ assert_backup_matches_original() {
   }
 }
 
-export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 export CLAUDE_PLUGIN_ROOT="$(pwd)"
+
+unset CLAUDE_PROJECT_DIR
+
+SESSION_CWD="$TMP_DIR/session-start"
+mkdir -p "$SESSION_CWD"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_file_exists "$SESSION_CWD/.claude/flow_state.json"
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.project_dir' "\"$SESSION_CWD\""
+
+write_v2_state_without_workflow "$SESSION_CWD/.claude/flow_state.json"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
+
+export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 
 mkdir -p "$CLAUDE_PROJECT_DIR/.claude"
 
