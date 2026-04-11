@@ -52,6 +52,20 @@ assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
 
+write_v2_state_with_partial_workflow "$SESSION_CWD/.claude/flow_state.json"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_at' 'null'
+if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
+  echo "Expected partial workflow state to normalize in place without backup" >&2
+  exit 1
+fi
+
 write_v2_state_with_broken_workflow "$SESSION_CWD/.claude/flow_state.json"
 export CLAUDE_PROJECT_DIR="$SESSION_CWD"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow.original"
@@ -64,6 +78,19 @@ fi
 
 assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_backup_matches_original "$TMP_DIR/unsafe-workflow.original" "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
+
+write_v2_state_with_invalid_workflow_types "$SESSION_CWD/.claude/flow_state.json"
+cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow-fields.original"
+
+if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+  echo "Expected init-state.sh to recover from unsafe v2 workflow field types" >&2
+  cat /tmp/test-init-state.err >&2
+  exit 1
+fi
+
+assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_backup_matches_original "$TMP_DIR/unsafe-workflow-fields.original" "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
 
 export CLAUDE_PROJECT_DIR="$TMP_DIR/project"

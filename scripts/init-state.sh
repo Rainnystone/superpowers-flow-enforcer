@@ -100,11 +100,42 @@ if [ -f "$STATE_FILE" ]; then
     exit 0
   fi
 
-  WORKFLOW_TYPE="$(jq -r 'if has("workflow") then (.workflow | type) else "missing" end' "$STATE_FILE")"
+  WORKFLOW_STATUS="$(jq -r '
+    if has("workflow") then
+      if (.workflow | type) != "object" then
+        "unsafe"
+      elif (.workflow.active | type) != "boolean" then
+        "unsafe"
+      else
+        def nullable_status($key):
+          if (.workflow | has($key)) then
+            if ((.workflow[$key] | type) == "null") or ((.workflow[$key] | type) == "string") then
+              "ok"
+            else
+              "unsafe"
+            end
+          else
+            "missing"
+          end;
 
-  if [ "$WORKFLOW_TYPE" = "missing" ]; then
+        (nullable_status("activated_by")) as $activated_by_status
+        | (nullable_status("activated_at")) as $activated_at_status
+        | if ($activated_by_status == "unsafe" or $activated_at_status == "unsafe") then
+            "unsafe"
+          elif ($activated_by_status == "missing" or $activated_at_status == "missing") then
+            "needs_normalization"
+          else
+            "valid"
+          end
+      end
+    else
+      "missing"
+    end
+  ' "$STATE_FILE")"
+
+  if [ "$WORKFLOW_STATUS" = "missing" ] || [ "$WORKFLOW_STATUS" = "needs_normalization" ]; then
     normalize_workflow_state
-  elif [ "$WORKFLOW_TYPE" != "object" ]; then
+  elif [ "$WORKFLOW_STATUS" = "unsafe" ]; then
     backup_and_reset_state
     echo "{\"continue\": true, \"systemMessage\": \"Flow state backed up and reset at $STATE_FILE\"}"
     exit 0
