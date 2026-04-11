@@ -25,13 +25,17 @@ jq -e '
 }
 
 task_completed_prompt="$(jq -r '.hooks.PostToolUse[] | select(.matcher == "TaskCompleted") | .hooks[0].prompt' hooks/hooks.json)"
+spec_review_prompt="$(jq -r '.hooks.PostToolUse[] | select(.matcher == "Write|Edit") | .hooks[0].prompt' hooks/hooks.json)"
+plan_worktree_prompt="$(jq -r '.hooks.PostToolUse[] | select(.matcher == "Write") | .hooks[0].prompt' hooks/hooks.json)"
 stop_prompts="$(jq -r '.hooks.Stop[].hooks[0].prompt' hooks/hooks.json)"
 
-TASK_COMPLETED_PROMPT="$task_completed_prompt" STOP_PROMPTS="$stop_prompts" python3 - <<'PY'
+TASK_COMPLETED_PROMPT="$task_completed_prompt" SPEC_REVIEW_PROMPT="$spec_review_prompt" PLAN_WORKTREE_PROMPT="$plan_worktree_prompt" STOP_PROMPTS="$stop_prompts" python3 - <<'PY'
 import os
 import sys
 
 task_prompt = os.environ['TASK_COMPLETED_PROMPT']
+spec_review_prompt = os.environ['SPEC_REVIEW_PROMPT']
+plan_worktree_prompt = os.environ['PLAN_WORKTREE_PROMPT']
 stop_prompts = os.environ['STOP_PROMPTS'].splitlines()
 first_stop_prompt, second_stop_prompt = stop_prompts
 
@@ -51,6 +55,32 @@ if 'review.tasks[task_id] is missing or not fully passed' in task_prompt:
 
 if 'If workflow.active is not true, return {"continue": true}' not in task_prompt:
     sys.stderr.write('Expected TaskCompleted to allow completion when workflow.active is not true\n')
+    raise SystemExit(1)
+
+required_spec_review_checks = [
+    'Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/specs/*.md',
+    'normalized path matches docs/superpowers/specs/*.md',
+    'repo-relative',
+    'leading ./',
+    'project-root absolute',
+]
+
+missing_spec_review = [needle for needle in required_spec_review_checks if needle not in spec_review_prompt]
+if missing_spec_review:
+    sys.stderr.write('Expected spec self-review PostToolUse prompt to describe normalized spec path handling: ' + ', '.join(missing_spec_review) + '\n')
+    raise SystemExit(1)
+
+required_plan_worktree_checks = [
+    'Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/plans/*.md',
+    'normalized path matches docs/superpowers/plans/*.md',
+    'repo-relative',
+    'leading ./',
+    'project-root absolute',
+]
+
+missing_plan_worktree = [needle for needle in required_plan_worktree_checks if needle not in plan_worktree_prompt]
+if missing_plan_worktree:
+    sys.stderr.write('Expected plan->worktree PostToolUse prompt to describe normalized plan path handling: ' + ', '.join(missing_plan_worktree) + '\n')
     raise SystemExit(1)
 
 if not any('interrupt.allowed' in prompt for prompt in stop_prompts):

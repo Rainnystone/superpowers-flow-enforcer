@@ -78,7 +78,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If file path matches docs/superpowers/specs/*.md and brainstorming.spec_self_reviewed is false, return {\"continue\": false, \"systemMessage\": \"SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。\"}. Else return {\"continue\": true}.",
+            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Use the same normalized path semantics as sync-post-tool-state.sh: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/specs/*.md. If normalized path matches docs/superpowers/specs/*.md and brainstorming.spec_self_reviewed is false, return {\"continue\": false, \"systemMessage\": \"SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。\"}. Else return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -88,7 +88,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If file path matches docs/superpowers/plans/*.md and worktree.created is false, return {\"continue\": false, \"systemMessage\": \"Plan 已写完，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。\"}. Else return {\"continue\": true}.",
+            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Use the same normalized path semantics as sync-post-tool-state.sh: Normalize candidate file paths by treating repo-relative, leading ./, and project-root absolute forms consistently before matching docs/superpowers/plans/*.md. If normalized path matches docs/superpowers/plans/*.md and worktree.created is false, return {\"continue\": false, \"systemMessage\": \"Plan 已写完，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。\"}. Else return {\"continue\": true}.",
             "timeout": 30
           }
         ]
