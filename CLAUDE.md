@@ -1,17 +1,18 @@
 # Superpowers Flow Enforcer Plugin
 
-> This plugin enforces the superpowers workflow through hooks, preventing you from skipping critical phases like brainstorming, TDD, review, and verification.
+> This plugin supplements superpowers with workflow-aware hooks. Workflow-only gates fail open until the session explicitly enters the superpowers workflow, then the hooks enforce critical phases like brainstorming, TDD, review, and verification.
 
 ## How It Works
 
-The plugin uses Claude Code hooks to block operations that would skip required workflow steps:
+The plugin uses Claude Code hooks to enforce workflow only after explicit workflow entry:
 
-- **Brainstorming Phase**: Blocks SPEC writing without self-review and user approval
-- **Planning Phase**: Requires worktree creation before TDD starts
-- **TDD Phase**: Blocks production code without verified failing test (IRON LAW)
-- **Review Phase**: Requires two-stage review (spec + code quality) before task completion
-- **Verification Phase**: Blocks completion claims without fresh test evidence
-- **Debugging Phase**: Requires systematic debugging on test failures
+- **Workflow Entry**: The current implementation treats skip requests and canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` writes as explicit entry signals. Those paths are recognized in repo-relative, `./...`, and project-root absolute forms.
+- **Pre-Activation Behavior**: If the session never enters the workflow, workflow-only gates stay inactive and ordinary Claude Code work is not blocked by those phase checks.
+- **Brainstorming / Planning**: After activation, SPEC writing still requires self-review and user approval before planning can proceed.
+- **TDD Phase**: Production code is blocked without a verified failing test.
+- **Review Phase**: Task completion requires two-stage review (spec + code quality).
+- **Verification / Stop**: Completion claims still need fresh transcript-visible verification evidence. State-based stop gates fail open when state is missing, unreadable, or workflow is inactive.
+- **Debugging Phase**: Failed test commands still trigger debugging-state sync.
 
 ## Bypass Mechanism
 
@@ -33,6 +34,7 @@ Pause handling is text keyword based: keywords in user text set `interrupt.allow
 
 The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` tracking:
 - Current workflow phase
+- Workflow activation status (`workflow.active`, `workflow.activated_by`, `workflow.activated_at`)
 - Phase completion status
 - Bypass exceptions and confirmations
 - Interrupt status
@@ -42,11 +44,14 @@ The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` trac
 | Hook | Purpose |
 |------|---------|
 | SessionStart | Initialize state file |
-| UserPromptSubmit | Detect bypass requests |
-| PreToolUse (Edit|Write) | TDD enforcement - most critical |
-| PostToolUse (TaskCompleted) | Two-stage review completion check |
+| UserPromptSubmit | Detect bypass / interrupt requests and self-heal missing state |
+| PreToolUse (Edit\|Write) | Workflow-aware write gating + TDD enforcement |
+| PreToolUse (AskUserQuestion) | Brainstorming findings gate when workflow is active |
+| PostToolUse (Write\|Edit) | SPEC self-review gate |
+| PostToolUse (Write) | Plan → Worktree gate |
+| PostToolUse (TaskCompleted) | Two-stage review completion check when workflow is active |
 | PostToolUseFailure (Bash) | Trigger debugging-state sync on failed commands |
-| Stop | Verification before completion |
+| Stop | Transcript-based verification before completion + workflow-aware stop gate |
 
 ## Skills Referenced
 

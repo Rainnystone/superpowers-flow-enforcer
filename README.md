@@ -2,17 +2,20 @@
 
 English | [中文](./README_cn.md)
 
-A Claude Code plugin that enforces the superpowers workflow through hooks, preventing you from skipping critical development phases. It is a supplement to [obra/superpowers](https://github.com/obra/superpowers), not a replacement, and this repo is designed to be used together with [planning-with-files](https://github.com/othmanadi/planning-with-files) for external memory.
+A Claude Code plugin that supplements [obra/superpowers](https://github.com/obra/superpowers) by enforcing workflow-aware hooks after a session explicitly enters the superpowers workflow. It is not a replacement, and this repo is designed to be used together with [planning-with-files](https://github.com/othmanadi/planning-with-files) for external memory.
 
 ## Overview
 
 **Core Principle**: Don't skip steps during execution.
 
-The plugin implements hard blocking hooks that enforce:
+The plugin implements workflow-aware hooks that enforce:
+- Workflow-only gates fail open until the session explicitly enters the superpowers workflow
 - Brainstorming → SPEC → Planning → TDD → Review → Verification → Finishing workflow
 - Two-stage code review (spec compliance + code quality)
 - Fresh verification evidence before completion claims
 - Systematic debugging methodology on test failures
+
+Workflow entry is explicit, not inferred from every Claude Code session. In the current implementation, entry happens when the session records a skip request or writes canonical superpowers artifacts under `docs/superpowers/specs/*.md` or `docs/superpowers/plans/*.md`. Those artifact paths are recognized in repo-relative, `./...`, and project-root absolute forms.
 
 `planning-with-files` provides the persistent external memory for this setup through `task_plan.md`, `findings.md`, and `progress.md`. This is especially useful in Claude Code setups that route to GLM-5 with a 128K context window, where disk-backed tracking helps keep long-running work aligned across sessions.
 
@@ -60,24 +63,24 @@ Use the three pieces together during brainstorming, spec, planning, and executio
 
 - `superpowers` drives the workflow and phase discipline.
 - `planning-with-files` records the durable project state in `task_plan.md`, `findings.md`, and `progress.md`.
-- This plugin enforces the handoff so you do not skip brainstorming, planning, review, or verification.
+- This plugin enforces the handoff so you do not skip brainstorming, planning, review, or verification once the session has actually entered the superpowers workflow.
 
-In practice, you start with superpowers for brainstorming and spec work, write the plan into planning-with-files, then keep updating `progress.md` while execution continues.
+In practice, you start with superpowers for brainstorming and spec work, write the plan into planning-with-files, then keep updating `progress.md` while execution continues. If the user never enters the superpowers workflow, workflow-only gates stay inactive and ordinary Claude Code work is not blocked by those phase checks.
 
 ## Hook System
 
 | Hook Event | Matcher | Enforcement |
 |------------|---------|-------------|
 | SessionStart | * | Initialize workflow state |
-| UserPromptSubmit | * | Bypass request detection |
-| PreToolUse | Edit\|Write | TDD IRON LAW - no production code without failing test |
-| PostToolUse | AskUserQuestion | Brainstorming findings update |
+| UserPromptSubmit | * | Bypass / interrupt detection + missing-state bootstrap |
+| PreToolUse | Edit\|Write | Workflow-aware write gating + TDD IRON LAW |
+| PreToolUse | AskUserQuestion | Brainstorming findings update when workflow is active |
 | PostToolUse | Write\|Edit | SPEC self-review required |
 | PostToolUse | Write | Plan → Worktree transition |
 | PostToolUse | Bash | Worktree → Baseline tests |
-| PostToolUse | TaskCompleted | Two-stage review completion |
+| PostToolUse | TaskCompleted | Two-stage review completion when workflow is active |
 | PostToolUseFailure | Bash | Systematic debugging on test failure |
-| Stop | * | Verification before completion + Interrupt handling |
+| Stop | * | Transcript-based completion verification + workflow-aware stop gate |
 
 ## TDD Enforcement (Most Critical)
 
@@ -162,6 +165,7 @@ State file: `$CLAUDE_PROJECT_DIR/.claude/flow_state.json`
 
 Tracks:
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
+- `workflow.*`: `active`, `activated_by`, `activated_at`
 - `brainstorming.*`: `question_asked`, `findings_updated_after_question`, `spec_written`, `spec_reviewed`, `user_approved_spec`
 - `planning.*`: `plan_written`, `plan_file`, `execution_mode`
 - `worktree.*`: `created`, `path`, `baseline_verified`
@@ -190,6 +194,8 @@ The plugin references these superpowers skills:
 **Hook not firing**: Run `/plugin` and check the Installed/Errors tabs, then run `/reload-plugins`.
 
 **Blocked unexpectedly**: Check state file for current phase status. May need to complete earlier phase.
+
+**Workflow gate not applying**: Confirm the session has actually entered the superpowers workflow, for example through a skip request or by writing `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`.
 
 **Bypass not working**: Ensure you stated your reason clearly. The plugin needs confirmation.
 

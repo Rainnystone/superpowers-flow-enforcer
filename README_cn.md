@@ -2,17 +2,20 @@
 
 [English](./README.md) | 中文
 
-一个 Claude Code 插件，通过 hooks 强制执行 superpowers 工作流，防止跳过关键开发阶段。它是 [obra/superpowers](https://github.com/obra/superpowers) 的补充，不是替代品，并且这个仓库的工作流设计为与 [planning-with-files](https://github.com/othmanadi/planning-with-files) 配合使用来提供外部记忆。
+一个 Claude Code 插件，在会话**明确进入** superpowers 工作流之后，通过 workflow-aware hooks 强制执行关键阶段。它是 [obra/superpowers](https://github.com/obra/superpowers) 的补充，不是替代品，并且这个仓库的工作流设计为与 [planning-with-files](https://github.com/othmanadi/planning-with-files) 配合使用来提供外部记忆。
 
 ## 概述
 
 **核心原则**: 执行时不跳步骤。
 
-插件实现硬阻断 hooks，强制执行：
+插件实现 workflow-aware hooks，强制执行：
+- 在会话明确进入 superpowers workflow 之前，workflow-only 门禁默认 fail-open
 - Brainstorming → SPEC → Planning → TDD → Review → Verification → Finishing 工作流
 - 两阶段代码审查（spec 合规性 + 代码质量）
 - 完成声明前必须有新鲜验证证据
 - 测试失败时使用系统化调试方法论
+
+这里的“进入 workflow”是显式动作，不是对所有 Claude Code 会话一刀切推断。当前实现里，进入动作包括：记录 skip 请求，或写入 `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` 这类 canonical superpowers 工件。这些工件路径支持仓库相对路径、`./...` 形式，以及项目根目录下的绝对路径。
 
 `planning-with-files` 在这里提供持久化的外部记忆，通过 `task_plan.md`、`findings.md`、`progress.md` 记录状态。这个定位尤其适合 Claude Code 集成里路由到 GLM-5、只有 128K 上下文窗口的配置，因为磁盘上的追踪可以帮助长会话保持一致。
 
@@ -60,24 +63,24 @@
 
 - `superpowers` 负责工作流和阶段纪律。
 - `planning-with-files` 把稳定状态写进 `task_plan.md`、`findings.md`、`progress.md`。
-- 这个插件负责强制衔接，避免跳过 brainstorming、planning、review 或 verification。
+- 这个插件负责在会话已经进入 superpowers workflow 后强制阶段衔接，避免跳过 brainstorming、planning、review 或 verification。
 
-实际操作时，先用 superpowers 做 brainstorming 和 spec，再把计划写入 planning-with-files，执行过程中持续更新 `progress.md`。
+实际操作时，先用 superpowers 做 brainstorming 和 spec，再把计划写入 planning-with-files，执行过程中持续更新 `progress.md`。如果用户根本没有进入 superpowers workflow，那么 workflow-only 门禁不会去阻断普通 Claude Code 工作流。
 
 ## Hook 系统
 
 | Hook 事件 | 匹配器 | 强制执行 |
 |-----------|--------|----------|
 | SessionStart | * | 初始化工作流状态 |
-| UserPromptSubmit | * | Bypass 请求检测 |
-| PreToolUse | Edit\|Write | TDD 铁律 - 无失败测试禁止写生产代码 |
-| PostToolUse | AskUserQuestion | Brainstorming findings 更新 |
+| UserPromptSubmit | * | Bypass / 中断检测 + 缺失状态自举 |
+| PreToolUse | Edit\|Write | workflow-aware 写入门禁 + TDD 铁律 |
+| PreToolUse | AskUserQuestion | 仅在 workflow 激活时要求更新 Brainstorming findings |
 | PostToolUse | Write\|Edit | SPEC 自审要求 |
 | PostToolUse | Write | Plan → Worktree 转换 |
 | PostToolUse | Bash | Worktree → 基准测试 |
-| PostToolUse | TaskCompleted | 两阶段审查完成 |
+| PostToolUse | TaskCompleted | 仅在 workflow 激活时要求两阶段审查完成 |
 | PostToolUseFailure | Bash | 测试失败时系统化调试 |
-| Stop | * | 完成前验证 + 中断处理 |
+| Stop | * | 基于 transcript 的完成验证 + workflow-aware 停止门禁 |
 
 ## TDD 强制执行（最关键）
 
@@ -163,6 +166,7 @@ templates/
 
 追踪内容:
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
+- `workflow.*`: `active`、`activated_by`、`activated_at`
 - `brainstorming.*`: `question_asked`、`findings_updated_after_question`、`spec_written`、`spec_reviewed`、`user_approved_spec`
 - `planning.*`: `plan_written`、`plan_file`、`execution_mode`
 - `worktree.*`: `created`、`path`、`baseline_verified`
@@ -191,6 +195,8 @@ templates/
 **Hook 未触发**: 执行 `/plugin` 查看 Installed/Errors，再执行 `/reload-plugins`。
 
 **意外被阻断**: 检查状态文件的当前阶段状态。可能需要先完成前一阶段。
+
+**为什么 workflow 门禁没生效**: 先确认当前会话是否真的进入了 superpowers workflow，比如是否记录了 skip 请求，或者是否写入了 `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`。
 
 **Bypass 不生效**: 确保清楚说明了理由。插件需要确认。
 
