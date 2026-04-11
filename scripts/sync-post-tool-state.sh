@@ -1093,12 +1093,26 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
     fi
 
     if echo "$FILE_PATH" | grep -qE '^docs/superpowers/specs/.*\.md$'; then
-      jq --arg path "$FILE_PATH" '.current_phase = "brainstorming" | .brainstorming.spec_written = true | .brainstorming.spec_file = $path' "$STATE_FILE" > "$tmp_file"
+      jq --arg path "$FILE_PATH" --arg now "$NOW_UTC" '
+        .current_phase = "brainstorming"
+        | .brainstorming.spec_written = true
+        | .brainstorming.spec_file = $path
+        | .workflow.active = true
+        | .workflow.activated_by = "spec_write"
+        | .workflow.activated_at = $now
+      ' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
     fi
 
     if echo "$FILE_PATH" | grep -qE '^docs/superpowers/plans/.*\.md$'; then
-      jq --arg path "$FILE_PATH" '.current_phase = "planning" | .planning.plan_written = true | .planning.plan_file = $path' "$STATE_FILE" > "$tmp_file"
+      jq --arg path "$FILE_PATH" --arg now "$NOW_UTC" '
+        .current_phase = "planning"
+        | .planning.plan_written = true
+        | .planning.plan_file = $path
+        | .workflow.active = true
+        | .workflow.activated_by = "plan_write"
+        | .workflow.activated_at = $now
+      ' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
     fi
 
