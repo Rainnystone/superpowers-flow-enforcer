@@ -135,19 +135,25 @@ if missing_entry_allows:
     raise SystemExit(1)
 
 try:
-    specs_allow_index = prompt.index('docs/superpowers/specs/*.md')
-    plans_allow_index = prompt.index('docs/superpowers/plans/*.md')
+    artifact_allow_branch = 'If path matches canonical workflow-entry artifacts docs/superpowers/specs/*.md or docs/superpowers/plans/*.md, return allow'
+    artifact_allow_index = prompt.index(artifact_allow_branch)
     workflow_active_index = prompt.index('If workflow.active is not true, return allow')
 except ValueError:
-    sys.stderr.write('Expected production-write prompt to exempt canonical workflow-entry artifacts before gating on workflow.active\n')
+    sys.stderr.write('Expected production-write prompt to define an unconditional workflow-entry artifact allow branch before gating on workflow.active\n')
     raise SystemExit(1)
 
-if not (specs_allow_index < workflow_active_index and plans_allow_index < workflow_active_index):
-    sys.stderr.write('Expected workflow.active gate to run only after canonical workflow-entry artifact exemptions\n')
+if artifact_allow_index > workflow_active_index:
+    sys.stderr.write('Expected workflow.active gate to run only after the unconditional workflow-entry artifact allow branch\n')
     raise SystemExit(1)
 
 if 'If workflow.active is not true, return allow' not in prompt:
     sys.stderr.write('Expected production-write prompt to allow writes when workflow.active is not true\n')
+    raise SystemExit(1)
+
+artifact_allow_segment = prompt[artifact_allow_index:workflow_active_index]
+
+if 'workflow.active' in artifact_allow_segment:
+    sys.stderr.write('Expected workflow-entry artifact allow branch to be unconditional, without workflow.active checks\n')
     raise SystemExit(1)
 
 if 'If workflow.active is not true, return {"continue": true}' not in ask_prompt:
