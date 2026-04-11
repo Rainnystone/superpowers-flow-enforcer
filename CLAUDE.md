@@ -27,7 +27,7 @@ After confirmation, the bypass is recorded in state and hooks will allow the ski
 When you need to pause work, say:
 - "停止" / "stop" / "pause" / "暂停" / "明天继续"
 
-The plugin records the interrupt in state and allows you to stop cleanly.
+Pause handling is text keyword based: keywords in user text set `interrupt.allowed`, and `Stop` reads that state to allow a clean stop.
 
 ## State File
 
@@ -44,7 +44,8 @@ The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` trac
 | SessionStart | Initialize state file |
 | UserPromptSubmit | Detect bypass requests |
 | PreToolUse (Edit|Write) | TDD enforcement - most critical |
-| PostToolUse | Phase transition checks |
+| PostToolUse (TaskCompleted) | Two-stage review completion check |
+| PostToolUseFailure (Bash) | Trigger debugging-state sync on failed commands |
 | Stop | Verification before completion |
 
 ## Skills Referenced

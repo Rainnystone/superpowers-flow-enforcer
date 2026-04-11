@@ -2,7 +2,7 @@
 
 [English](./README.md) | 中文
 
-一个 Claude Code 插件，通过 hooks 强制执行 superpowers 工作流，防止跳过关键开发阶段。
+一个 Claude Code 插件，通过 hooks 强制执行 superpowers 工作流，防止跳过关键开发阶段。它是 [obra/superpowers](https://github.com/obra/superpowers) 的补充，不是替代品，并且这个仓库的工作流设计为与 [planning-with-files](https://github.com/othmanadi/planning-with-files) 配合使用来提供外部记忆。
 
 ## 概述
 
@@ -14,14 +14,32 @@
 - 完成声明前必须有新鲜验证证据
 - 测试失败时使用系统化调试方法论
 
+`planning-with-files` 在这里提供持久化的外部记忆，通过 `task_plan.md`、`findings.md`、`progress.md` 记录状态。这个定位尤其适合 Claude Code 集成里路由到 GLM-5、只有 128K 上下文窗口的配置，因为磁盘上的追踪可以帮助长会话保持一致。
+
 ## 安装
 
-1. 将本仓库内文件复制到 Claude 插件目录：
+按这个顺序安装和使用：
+
+1. 先安装并使用 [obra/superpowers](https://github.com/obra/superpowers)。
+2. 再安装并使用 [planning-with-files](https://github.com/othmanadi/planning-with-files)，让项目具备 `task_plan.md`、`findings.md`、`progress.md` 这套持久记忆。
+3. 将本仓库内文件复制到 Claude 插件目录：
    ```
    ~/.claude/plugins/superpowers-flow-enforcer/
    ```
 
-2. 重启 Claude Code 加载插件。
+4. 重启 Claude Code 加载插件。
+
+顺序很重要：先有 superpowers，再配合 planning-with-files，最后安装这个插件。
+
+## 使用方式
+
+在 brainstorming、spec、planning 和 execution 这几个阶段把三者一起用：
+
+- `superpowers` 负责工作流和阶段纪律。
+- `planning-with-files` 把稳定状态写进 `task_plan.md`、`findings.md`、`progress.md`。
+- 这个插件负责强制衔接，避免跳过 brainstorming、planning、review 或 verification。
+
+实际操作时，先用 superpowers 做 brainstorming 和 spec，再把计划写入 planning-with-files，执行过程中持续更新 `progress.md`。
 
 ## Hook 系统
 
@@ -34,8 +52,8 @@
 | PostToolUse | Write\|Edit | SPEC 自审要求 |
 | PostToolUse | Write | Plan → Worktree 转换 |
 | PostToolUse | Bash | Worktree → 基准测试 |
-| PostToolUse | TaskUpdate | 两阶段审查完成 |
-| PostToolUse | Bash | 测试失败时系统化调试 |
+| PostToolUse | TaskCompleted | 两阶段审查完成 |
+| PostToolUseFailure | Bash | 测试失败时系统化调试 |
 | Stop | * | 完成前验证 + 中断处理 |
 
 ## TDD 强制执行（最关键）
@@ -57,7 +75,7 @@ PreToolUse hook 执行 TDD 铁律：
 - `_test.` 或 `_spec.` 后缀
 
 **TDD 例外**（配置文件、类型定义、文档、生成文件）:
-- 通过 `check-exception.sh` 自动检查
+- 通过 PreToolUse 的路径白名单规则处理
 - 类别: config, types, docs, generated, specs, plugin
 
 ## Bypass 机制
@@ -86,7 +104,7 @@ PreToolUse hook 执行 TDD 铁律：
 
 **中文**: "停止", "暂停", "暂停一下", "休息一下", "明天继续", "稍后继续"
 
-插件记录中断并允许干净停止。
+暂停处理是 text keyword 检测：从用户文本关键词写入 `interrupt.allowed`，再由 `Stop` 读取状态后放行停止。
 
 ## 完成前验证
 
@@ -111,7 +129,7 @@ scripts/
 ├── update-state.sh    # 状态更新辅助脚本
 ├── sync-user-prompt-state.sh # UserPromptSubmit 状态同步
 ├── sync-post-tool-state.sh   # PostToolUse 状态同步
-└── check-exception.sh # TDD 例外检测
+└── check-exception.sh # 历史辅助脚本（当前 hooks 不调用）
 templates/
 └── flow_state.json.tmpl # 状态文件模板
 ```
@@ -122,12 +140,12 @@ templates/
 
 追踪内容:
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
-- `brainstorming.*`: skill invoked, findings updated, spec written/approved
-- `planning.*`: plan written, execution mode
-- `worktree.*`: created, baseline tests passed
-- `tdd.*`: test files, production files, verified failing tests
+- `brainstorming.*`: `question_asked`、`findings_updated_after_question`、`spec_written`、`spec_reviewed`、`user_approved_spec`
+- `planning.*`: `plan_written`、`plan_file`、`execution_mode`
+- `worktree.*`: `created`、`path`、`baseline_verified`
+- `tdd.*`: `pending_failure_record`、`last_failed_command`、`test_files_created`、`production_files_written`、`tests_verified_fail`、`tests_verified_pass`
 - `review.tasks`: 每个任务的审查状态
-- `finishing.*`: tests verified, choice made
+- `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found
 - `exceptions.*`: bypass 标记, 用户确认
 - `interrupt.*`: allowed, reason, keywords detected

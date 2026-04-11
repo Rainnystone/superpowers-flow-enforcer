@@ -2,7 +2,7 @@
 
 English | [中文](./README_cn.md)
 
-A Claude Code Plugin that enforces the superpowers workflow through hooks, preventing you from skipping critical development phases.
+A Claude Code plugin that enforces the superpowers workflow through hooks, preventing you from skipping critical development phases. It is a supplement to [obra/superpowers](https://github.com/obra/superpowers), not a replacement, and this repo is designed to be used together with [planning-with-files](https://github.com/othmanadi/planning-with-files) for external memory.
 
 ## Overview
 
@@ -14,14 +14,32 @@ The plugin implements hard blocking hooks that enforce:
 - Fresh verification evidence before completion claims
 - Systematic debugging methodology on test failures
 
+`planning-with-files` provides the persistent external memory for this setup through `task_plan.md`, `findings.md`, and `progress.md`. This is especially useful in Claude Code setups that route to GLM-5 with a 128K context window, where disk-backed tracking helps keep long-running work aligned across sessions.
+
 ## Installation
 
-1. Copy this repository's files into your Claude plugins folder:
+Install in this order:
+
+1. Install and use [obra/superpowers](https://github.com/obra/superpowers) first.
+2. Install and use [planning-with-files](https://github.com/othmanadi/planning-with-files) next so the project has `task_plan.md`, `findings.md`, and `progress.md` as persistent memory.
+3. Copy this repository's files into your Claude plugins folder:
    ```
    ~/.claude/plugins/superpowers-flow-enforcer/
    ```
 
-2. Restart Claude Code to load the plugin.
+4. Restart Claude Code to load the plugin.
+
+The order matters: superpowers first, planning-with-files second, then this plugin.
+
+## Usage
+
+Use the three pieces together during brainstorming, spec, planning, and execution:
+
+- `superpowers` drives the workflow and phase discipline.
+- `planning-with-files` records the durable project state in `task_plan.md`, `findings.md`, and `progress.md`.
+- This plugin enforces the handoff so you do not skip brainstorming, planning, review, or verification.
+
+In practice, you start with superpowers for brainstorming and spec work, write the plan into planning-with-files, then keep updating `progress.md` while execution continues.
 
 ## Hook System
 
@@ -34,8 +52,8 @@ The plugin implements hard blocking hooks that enforce:
 | PostToolUse | Write\|Edit | SPEC self-review required |
 | PostToolUse | Write | Plan → Worktree transition |
 | PostToolUse | Bash | Worktree → Baseline tests |
-| PostToolUse | TaskUpdate | Two-stage review completion |
-| PostToolUse | Bash | Systematic debugging on test failure |
+| PostToolUse | TaskCompleted | Two-stage review completion |
+| PostToolUseFailure | Bash | Systematic debugging on test failure |
 | Stop | * | Verification before completion + Interrupt handling |
 
 ## TDD Enforcement (Most Critical)
@@ -57,7 +75,7 @@ When writing a production file (e.g., `src/utils/helper.ts`):
 - `_test.` or `_spec.` suffix
 
 **TDD exceptions** (config files, type definitions, docs, generated files):
-- Checked automatically via `check-exception.sh`
+- Handled by the PreToolUse path allow-list rules
 - Categories: config, types, docs, generated, specs, plugin
 
 ## Bypass Mechanism
@@ -87,7 +105,7 @@ When you need to pause:
 
 **Chinese**: "停止", "暂停", "暂停一下", "休息一下", "明天继续", "稍后继续"
 
-The plugin records the interrupt and allows clean stop.
+Pause handling is text keyword based: keywords in user text are recorded into `interrupt.allowed`, and `Stop` reads that state to allow a clean stop.
 
 ## Verification Before Completion
 
@@ -110,7 +128,7 @@ scripts/
 ├── update-state.sh    # State update helper
 ├── sync-user-prompt-state.sh # UserPromptSubmit state sync
 ├── sync-post-tool-state.sh   # PostToolUse state sync
-└── check-exception.sh # TDD exception detection
+└── check-exception.sh # Legacy helper script (not called by current hooks)
 templates/
 └── flow_state.json.tmpl # State file template
 ```
@@ -121,12 +139,12 @@ State file: `$CLAUDE_PROJECT_DIR/.claude/flow_state.json`
 
 Tracks:
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
-- `brainstorming.*`: skill invoked, findings updated, spec written/approved
-- `planning.*`: plan written, execution mode
-- `worktree.*`: created, baseline tests passed
-- `tdd.*`: test files, production files, verified failing tests
+- `brainstorming.*`: `question_asked`, `findings_updated_after_question`, `spec_written`, `spec_reviewed`, `user_approved_spec`
+- `planning.*`: `plan_written`, `plan_file`, `execution_mode`
+- `worktree.*`: `created`, `path`, `baseline_verified`
+- `tdd.*`: `pending_failure_record`, `last_failed_command`, `test_files_created`, `production_files_written`, `tests_verified_fail`, `tests_verified_pass`
 - `review.tasks`: per-task review status
-- `finishing.*`: tests verified, choice made
+- `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found
 - `exceptions.*`: bypass flags, user confirmed
 - `interrupt.*`: allowed, reason, keywords detected

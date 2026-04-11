@@ -36,7 +36,17 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Enforce workflow gates in this order: (1) If file_path is exactly .claude/flow_state.json, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"禁止直接手改 flow_state.json，请通过 hooks 自动推进状态。\"}. (2) If path matches docs/config/type/generated exceptions (*.md, docs/*, *.json, *.yaml, *.yml, *.config.*, .env*, *.d.ts, types/*.ts, *.types.ts, dist/*, build/*, docs/superpowers/specs/*, docs/superpowers/plans/*), return allow. (3) For any code/test write outside above exceptions: if brainstorming.spec_written is not true and not (exceptions.skip_brainstorming and exceptions.user_confirmed), deny with message requiring brainstorming/SPEC first. If planning.plan_written is not true and not (exceptions.skip_brainstorming and exceptions.user_confirmed), deny with message requiring writing-plans/Plan first. (4) If path is test-like (contains test/tests/spec/__tests__ or name has .test. .spec. _test. _spec.), return allow. (5) If exceptions.skip_tdd and exceptions.user_confirmed are true, return allow. (6) Otherwise treat as production file: infer candidate tests (same basename with .test/.spec). If no candidate appears in tdd.tests_verified_fail, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST. 先写测试并运行到失败。\"}. Else return allow.",
+            "prompt": "Read $TOOL_INPUT.file_path and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. Enforce workflow gates in this order: (1) If file_path is exactly .claude/flow_state.json, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"禁止直接手改 flow_state.json，请通过 hooks 自动推进状态。\"}. (2) If path matches docs/superpowers/plans/*.md and not (exceptions.skip_planning and exceptions.user_confirmed), deny unless brainstorming.spec_reviewed is true and brainstorming.user_approved_spec is true; only skip_planning may bypass this gate. If path matches docs/config/type/generated exceptions (*.md, docs/*, *.json, *.yaml, *.yml, *.config.*, .env*, *.d.ts, types/*.ts, *.types.ts, dist/*, build/*, docs/superpowers/specs/*), return allow. (3) For any code/test write outside above exceptions: if brainstorming.spec_written is not true and not (exceptions.skip_brainstorming and exceptions.user_confirmed), deny with message requiring brainstorming/SPEC first. (4) If exceptions.skip_tdd and exceptions.user_confirmed are true, return allow. (5) If worktree.created is false or worktree.baseline_verified is false, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"TDD 之前必须先用 record-worktree-state.sh 记录 worktree.created 和 worktree.baseline_verified。\"}. (6) If path is test-like (contains test/tests/spec/__tests__ or name has .test. .spec. _test. _spec.), return allow. (7) If tdd.pending_failure_record is true, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"检测到待记录的失败测试目标。先运行 record-tdd-state.sh fail <target>，再继续修改生产代码。\"}. (8) Otherwise treat as production file: infer candidate tests (same basename with .test/.spec). If no candidate appears in tdd.tests_verified_fail, return {\"hookSpecificOutput\":{\"permissionDecision\":\"deny\"},\"systemMessage\":\"NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST. 先写测试并运行到失败。\"}. Else return allow.",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "AskUserQuestion",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If current_phase is brainstorming and brainstorming.question_asked is true, and brainstorming.findings_updated_after_question is false, return {\"continue\": false, \"systemMessage\": \"Brainstorming 阶段每次提问后必须更新 findings.md。\"}. Otherwise return {\"continue\": true}.",
             "timeout": 30
           }
         ]
@@ -60,16 +70,6 @@
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-post-tool-state.sh",
             "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "AskUserQuestion",
-        "hooks": [
-          {
-            "type": "prompt",
-            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If current_phase is brainstorming and brainstorming.skill_invoked is true, and brainstorming.findings_updated is false, return {\"continue\": false, \"systemMessage\": \"Brainstorming 阶段每次提问后必须更新 findings.md。\"}. Otherwise return {\"continue\": true}.",
-            "timeout": 30
           }
         ]
       },
@@ -98,28 +98,30 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read $TOOL_INPUT.command and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If command contains 'git worktree add' and worktree.baseline_tests_passed is false, return {\"continue\": false, \"systemMessage\": \"Worktree 已创建，必须先完成 setup 和 baseline tests。\"}. Else return {\"continue\": true}.",
+            "prompt": "Read $TOOL_INPUT.command and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If command contains 'git worktree add' and worktree.baseline_verified is false, return {\"continue\": false, \"systemMessage\": \"Worktree 已创建，必须先完成 setup 和 baseline verification。\"}. Else return {\"continue\": true}.",
             "timeout": 30
           }
         ]
       },
       {
-        "matcher": "TaskUpdate",
+        "matcher": "TaskCompleted",
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read $TOOL_INPUT and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If task status is completed and review.tasks[task_id] is missing or not fully passed (spec_review_passed/code_review_passed), return {\"continue\": false, \"systemMessage\": \"Task 标记完成前，必须完成两阶段 review。\"}. Otherwise return {\"continue\": true}.",
+            "prompt": "Read $TOOL_INPUT and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If task status is completed and review.tasks[task_id].spec_review_passed is not true or review.tasks[task_id].code_review_passed is not true, return {\"continue\": false, \"systemMessage\": \"Task 标记完成前，必须完成两阶段 review。\"}. Otherwise return {\"continue\": true}.",
             "timeout": 30
           }
         ]
-      },
+      }
+    ],
+    "PostToolUseFailure": [
       {
         "matcher": "Bash",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Read $TOOL_RESULT and state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If result contains test failure indicators (FAIL, failed, Error, assertion) and debugging.active is not true, return {\"continue\": false, \"systemMessage\": \"检测到测试失败，请先执行 systematic-debugging 再改代码。\"}. Otherwise return {\"continue\": true}.",
-            "timeout": 30
+            "type": "command",
+            "command": "HOOK_EVENT=PostToolUseFailure bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-post-tool-state.sh",
+            "timeout": 10
           }
         ]
       }
@@ -130,7 +132,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json and transcript at $TRANSCRIPT_PATH. If interrupt.allowed is true, return {\"decision\": \"approve\", \"systemMessage\": \"Interrupt recorded.\"}. Otherwise if completion keywords appear (done/complete/tests pass/fixed/working/完成/修复) but no fresh passing verification evidence in the latest context, return {\"decision\": \"block\", \"reason\": \"Completion claimed without fresh verification evidence. Run verification now and show output.\"}. Else return {\"decision\": \"approve\"}.",
+            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json and transcript at $TRANSCRIPT_PATH. If stop_hook_active is true, return {\"decision\": \"approve\"}. If interrupt.allowed is true, return {\"decision\": \"approve\", \"systemMessage\": \"Interrupt recorded.\"}. Otherwise if completion keywords appear (done/complete/tests pass/fixed/working/完成/修复) but no fresh passing verification evidence in the latest context, return {\"decision\": \"block\", \"reason\": \"Completion claimed without fresh verification evidence. Run verification now and show output.\"}. Else return {\"decision\": \"approve\"}.",
             "timeout": 30
           }
         ]
@@ -140,7 +142,7 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If interrupt.allowed is true, return {\"decision\": \"approve\"}. If review.tasks is empty and not (exceptions.skip_review and exceptions.user_confirmed), return {\"decision\": \"block\", \"reason\": \"还没有 review 记录，先执行 requesting-code-review 的两阶段评审。\"}. If all tasks in review.tasks are fully passed and finishing.skill_invoked is false and not (exceptions.skip_finishing and exceptions.user_confirmed), return {\"decision\": \"block\", \"reason\": \"所有任务都已 review，通过后还需执行 finishing-a-development-branch。\"}. Otherwise return {\"decision\": \"approve\"}.",
+            "prompt": "Read state at $CLAUDE_PROJECT_DIR/.claude/flow_state.json. If stop_hook_active is true, return {\"decision\": \"approve\"}. If interrupt.allowed is true, return {\"decision\": \"approve\"}. If review.tasks is empty and not (exceptions.skip_review and exceptions.user_confirmed), return {\"decision\": \"block\", \"reason\": \"还没有 review 记录，先执行 requesting-code-review 的两阶段评审。\"}. If all tasks in review.tasks are fully passed and finishing.invoked is false and not (exceptions.skip_finishing and exceptions.user_confirmed), return {\"decision\": \"block\", \"reason\": \"所有任务都已 review，通过后还需执行 finishing-a-development-branch。\"}. Otherwise return {\"decision\": \"approve\"}.",
             "timeout": 30
           }
         ]

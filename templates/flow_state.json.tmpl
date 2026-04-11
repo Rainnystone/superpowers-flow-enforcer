@@ -1,37 +1,36 @@
 {
+  "state_version": 2,
   "current_phase": "init",
   "session_id": "",
   "project_dir": "",
   "initialized_at": "",
 
   "brainstorming": {
-    "skill_invoked": false,
-    "questions_asked": 0,
-    "findings_updated": false,
-    "findings_last_update": null,
+    "question_asked": false,
+    "findings_updated_after_question": false,
     "spec_written": false,
     "spec_file": null,
-    "spec_self_reviewed": false,
+    "spec_reviewed": false,
     "user_approved_spec": false
   },
 
   "planning": {
-    "skill_invoked": false,
     "plan_written": false,
     "plan_file": null,
     "execution_mode": null
   },
 
   "worktree": {
-    "skill_invoked": false,
     "created": false,
     "path": null,
-    "baseline_tests_passed": false
+    "baseline_verified": false
   },
 
   "tdd": {
     "current_task": null,
     "current_step": null,
+    "pending_failure_record": false,
+    "last_failed_command": null,
     "test_files_created": [],
     "production_files_written": [],
     "tests_verified_fail": [],
@@ -43,10 +42,7 @@
   },
 
   "finishing": {
-    "skill_invoked": false,
-    "tests_verified": false,
-    "choice_made": false,
-    "choice": null
+    "invoked": false
   },
 
   "debugging": {
@@ -58,9 +54,11 @@
 
   "exceptions": {
     "skip_brainstorming": false,
+    "skip_planning": false,
     "skip_tdd": false,
     "skip_review": false,
     "skip_finishing": false,
+    "pending_confirmation_for": null,
     "reason": null,
     "user_confirmed": false,
     "confirmed_at": null
