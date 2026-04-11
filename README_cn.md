@@ -21,15 +21,32 @@
 按这个顺序安装和使用：
 
 1. 先安装并使用 [obra/superpowers](https://github.com/obra/superpowers)。
+   ```
+   /plugin install superpowers@claude-plugins-official
+   ```
+   如果你使用社区 marketplace 版本：
+   ```
+   /plugin marketplace add obra/superpowers-marketplace
+   /plugin install superpowers@superpowers-marketplace
+   ```
 2. 再安装并使用 [planning-with-files](https://github.com/othmanadi/planning-with-files)，让项目具备 `task_plan.md`、`findings.md`、`progress.md` 这套持久记忆。
-3. 将本仓库内文件复制到 Claude 插件目录：
    ```
-   ~/.claude/plugins/superpowers-flow-enforcer/
+   /plugin marketplace add OthmanAdi/planning-with-files
+   /plugin install planning-with-files@planning-with-files
+   ```
+3. 通过本地源码加载这个插件（当前仓库不在官方 marketplace）：
+   ```
+   claude --plugin-dir /absolute/path/to/superpowers-flow-enforcer
+   ```
+4. 如果你在当前会话里安装或变更了其他插件，执行：
+   ```
+   /reload-plugins
    ```
 
-4. 重启 Claude Code 加载插件。
+顺序仍然很重要：先有 superpowers，再配合 planning-with-files，最后安装这个插件。
 
-顺序很重要：先有 superpowers，再配合 planning-with-files，最后安装这个插件。
+可选分发路径：
+- 如果你希望支持 `/plugin install superpowers-flow-enforcer@...`，需要先把这个插件发布到一个包含 `.claude-plugin/marketplace.json` 的 marketplace，再从该 marketplace 安装。
 
 ## 使用方式
 
@@ -165,7 +182,7 @@ templates/
 
 ## 故障排除
 
-**Hook 未触发**: 检查插件是否安装在 `~/.claude/plugins/`。
+**Hook 未触发**: 执行 `/plugin` 查看 Installed/Errors，再执行 `/reload-plugins`。
 
 **意外被阻断**: 检查状态文件的当前阶段状态。可能需要先完成前一阶段。
 

@@ -21,15 +21,32 @@ The plugin implements hard blocking hooks that enforce:
 Install in this order:
 
 1. Install and use [obra/superpowers](https://github.com/obra/superpowers) first.
+   ```
+   /plugin install superpowers@claude-plugins-official
+   ```
+   If you use the community marketplace variant:
+   ```
+   /plugin marketplace add obra/superpowers-marketplace
+   /plugin install superpowers@superpowers-marketplace
+   ```
 2. Install and use [planning-with-files](https://github.com/othmanadi/planning-with-files) next so the project has `task_plan.md`, `findings.md`, and `progress.md` as persistent memory.
-3. Copy this repository's files into your Claude plugins folder:
    ```
-   ~/.claude/plugins/superpowers-flow-enforcer/
+   /plugin marketplace add OthmanAdi/planning-with-files
+   /plugin install planning-with-files@planning-with-files
+   ```
+3. Load this plugin from local source (this repository is not in the official marketplace):
+   ```
+   claude --plugin-dir /absolute/path/to/superpowers-flow-enforcer
+   ```
+4. If you install or change other plugins during a running session, run:
+   ```
+   /reload-plugins
    ```
 
-4. Restart Claude Code to load the plugin.
+The order still matters: superpowers first, planning-with-files second, then this plugin.
 
-The order matters: superpowers first, planning-with-files second, then this plugin.
+Optional distribution path:
+- If you want `/plugin install superpowers-flow-enforcer@...`, first publish this plugin through a marketplace that contains a `.claude-plugin/marketplace.json`, then install from that marketplace.
 
 ## Usage
 
@@ -164,7 +181,7 @@ The plugin references these superpowers skills:
 
 ## Troubleshooting
 
-**Hook not firing**: Check that the plugin is installed in `~/.claude/plugins/`.
+**Hook not firing**: Run `/plugin` and check the Installed/Errors tabs, then run `/reload-plugins`.
 
 **Blocked unexpectedly**: Check state file for current phase status. May need to complete earlier phase.
 
