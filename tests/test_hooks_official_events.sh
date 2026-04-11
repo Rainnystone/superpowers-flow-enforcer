@@ -135,25 +135,37 @@ if missing_entry_allows:
     raise SystemExit(1)
 
 try:
-    artifact_allow_branch = 'If path matches canonical workflow-entry artifacts docs/superpowers/specs/*.md or docs/superpowers/plans/*.md, return allow'
-    artifact_allow_index = prompt.index(artifact_allow_branch)
+    artifact_entry_branch = 'If path matches canonical workflow-entry artifacts docs/superpowers/specs/*.md or docs/superpowers/plans/*.md and workflow.active is not true, return allow'
+    artifact_entry_index = prompt.index(artifact_entry_branch)
     workflow_active_index = prompt.index('If workflow.active is not true, return allow')
 except ValueError:
-    sys.stderr.write('Expected production-write prompt to define an unconditional workflow-entry artifact allow branch before gating on workflow.active\n')
+    sys.stderr.write('Expected production-write prompt to define a pre-activation workflow-entry artifact allow branch before the generic workflow.active allow\n')
     raise SystemExit(1)
 
-if artifact_allow_index > workflow_active_index:
-    sys.stderr.write('Expected workflow.active gate to run only after the unconditional workflow-entry artifact allow branch\n')
+if artifact_entry_index > workflow_active_index:
+    sys.stderr.write('Expected generic workflow.active allow to run after the pre-activation workflow-entry artifact branch\n')
     raise SystemExit(1)
 
 if 'If workflow.active is not true, return allow' not in prompt:
     sys.stderr.write('Expected production-write prompt to allow writes when workflow.active is not true\n')
     raise SystemExit(1)
 
-artifact_allow_segment = prompt[artifact_allow_index:workflow_active_index]
+artifact_entry_segment = prompt[artifact_entry_index:workflow_active_index]
 
-if 'workflow.active' in artifact_allow_segment:
-    sys.stderr.write('Expected workflow-entry artifact allow branch to be unconditional, without workflow.active checks\n')
+required_entry_branch_content = [
+    'docs/superpowers/specs/*.md',
+    'docs/superpowers/plans/*.md',
+    'workflow.active is not true',
+    'return allow',
+]
+
+missing_entry_branch_content = [needle for needle in required_entry_branch_content if needle not in artifact_entry_segment]
+if missing_entry_branch_content:
+    sys.stderr.write('Expected pre-activation workflow-entry branch to include: ' + ', '.join(missing_entry_branch_content) + '\n')
+    raise SystemExit(1)
+
+if workflow_active_index > plan_branch_index:
+    sys.stderr.write('Expected docs/superpowers/plans/*.md planning gate to remain separate after the generic workflow.active allow\n')
     raise SystemExit(1)
 
 if 'If workflow.active is not true, return {"continue": true}' not in ask_prompt:
