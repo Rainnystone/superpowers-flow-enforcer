@@ -49,7 +49,15 @@ bootstrap_state_if_missing() {
   printf '%s' "$INPUT" | CLAUDE_PROJECT_DIR="$PROJECT_DIR" CLAUDE_PLUGIN_ROOT="$PLUGIN_ROOT" bash "$INIT_STATE_SCRIPT" >/dev/null
 }
 
+state_is_readable() {
+  [ -f "$STATE_FILE" ] && jq empty "$STATE_FILE" >/dev/null 2>&1
+}
+
 bootstrap_state_if_missing
+
+if ! state_is_readable; then
+  exit 0
+fi
 
 USER_PROMPT="$(printf '%s' "$INPUT" | jq -r '.prompt // ""' 2>/dev/null || true)"
 PROMPT_LC="$(printf '%s' "$USER_PROMPT" | tr '[:upper:]' '[:lower:]')"
