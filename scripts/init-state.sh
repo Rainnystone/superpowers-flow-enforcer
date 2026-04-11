@@ -104,25 +104,27 @@ if [ -f "$STATE_FILE" ]; then
     if has("workflow") then
       if (.workflow | type) != "object" then
         "unsafe"
-      elif (.workflow.active | type) != "boolean" then
-        "unsafe"
       else
-        def nullable_status($key):
+        def workflow_field_status($key; $allowed_types):
           if (.workflow | has($key)) then
-            if ((.workflow[$key] | type) == "null") or ((.workflow[$key] | type) == "string") then
-              "ok"
-            else
-              "unsafe"
-            end
+            (.workflow[$key] | type) as $field_type
+            | if ($allowed_types | index($field_type)) then
+                "valid"
+              elif $field_type == "null" then
+                "needs_normalization"
+              else
+                "unsafe"
+              end
           else
-            "missing"
+            "needs_normalization"
           end;
 
-        (nullable_status("activated_by")) as $activated_by_status
-        | (nullable_status("activated_at")) as $activated_at_status
-        | if ($activated_by_status == "unsafe" or $activated_at_status == "unsafe") then
+        (workflow_field_status("active"; ["boolean"])) as $active_status
+        | (workflow_field_status("activated_by"; ["string"])) as $activated_by_status
+        | (workflow_field_status("activated_at"; ["string"])) as $activated_at_status
+        | if ($active_status == "unsafe" or $activated_by_status == "unsafe" or $activated_at_status == "unsafe") then
             "unsafe"
-          elif ($activated_by_status == "missing" or $activated_at_status == "missing") then
+          elif ($active_status == "needs_normalization" or $activated_by_status == "needs_normalization" or $activated_at_status == "needs_normalization") then
             "needs_normalization"
           else
             "valid"

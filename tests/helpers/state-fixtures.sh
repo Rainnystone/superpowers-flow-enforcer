@@ -31,6 +31,12 @@ write_v2_state_with_partial_workflow() {
   mv "$1.tmp" "$1"
 }
 
+write_v2_state_with_missing_active() {
+  write_v2_state "$1"
+  jq 'del(.workflow.active)' "$1" > "$1.tmp"
+  mv "$1.tmp" "$1"
+}
+
 write_v2_state_with_invalid_workflow_types() {
   write_v2_state "$1"
   jq '.workflow = {"active":"yes","activated_by":[],"activated_at":{}}' "$1" > "$1.tmp"

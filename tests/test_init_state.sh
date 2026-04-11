@@ -66,6 +66,21 @@ if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
   exit 1
 fi
 
+write_v2_state_with_missing_active "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_at' 'null'
+if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
+  echo "Expected missing-active workflow state to normalize in place without backup" >&2
+  exit 1
+fi
+
 write_v2_state_with_broken_workflow "$SESSION_CWD/.claude/flow_state.json"
 export CLAUDE_PROJECT_DIR="$SESSION_CWD"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow.original"
