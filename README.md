@@ -34,19 +34,25 @@ Install in this order:
    /plugin marketplace add OthmanAdi/planning-with-files
    /plugin install planning-with-files@planning-with-files
    ```
-3. Load this plugin from local source (this repository is not in the official marketplace):
+3. Install this plugin from local source (persistent installation):
+   ```
+   /plugin marketplace add /absolute/path/to/superpowers-flow-enforcer
+   /plugin install superpowers-flow-enforcer@superpowers-flow-enforcer-marketplace
+   /reload-plugins
+   ```
+
+   **Alternative: Temporary loading for development/testing**
    ```
    claude --plugin-dir /absolute/path/to/superpowers-flow-enforcer
    ```
+   This loads the plugin for the current session only without installation.
+
 4. If you install or change other plugins during a running session, run:
    ```
    /reload-plugins
    ```
 
-The order still matters: superpowers first, planning-with-files second, then this plugin.
-
-Optional distribution path:
-- If you want `/plugin install superpowers-flow-enforcer@...`, first publish this plugin through a marketplace that contains a `.claude-plugin/marketplace.json`, then install from that marketplace.
+The order matters: superpowers first, planning-with-files second, then this plugin.
 
 ## Usage
 

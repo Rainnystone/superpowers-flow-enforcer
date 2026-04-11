@@ -34,19 +34,25 @@
    /plugin marketplace add OthmanAdi/planning-with-files
    /plugin install planning-with-files@planning-with-files
    ```
-3. 通过本地源码加载这个插件（当前仓库不在官方 marketplace）：
+3. 从本地源码持久化安装这个插件：
+   ```
+   /plugin marketplace add /absolute/path/to/superpowers-flow-enforcer
+   /plugin install superpowers-flow-enforcer@superpowers-flow-enforcer-marketplace
+   /reload-plugins
+   ```
+
+   **备选方案：开发/测试时临时加载**
    ```
    claude --plugin-dir /absolute/path/to/superpowers-flow-enforcer
    ```
+   这种方式只在当前会话生效，不会写入安装注册表。
+
 4. 如果你在当前会话里安装或变更了其他插件，执行：
    ```
    /reload-plugins
    ```
 
-顺序仍然很重要：先有 superpowers，再配合 planning-with-files，最后安装这个插件。
-
-可选分发路径：
-- 如果你希望支持 `/plugin install superpowers-flow-enforcer@...`，需要先把这个插件发布到一个包含 `.claude-plugin/marketplace.json` 的 marketplace，再从该 marketplace 安装。
+顺序很重要：先有 superpowers，再配合 planning-with-files，最后安装这个插件。
 
 ## 使用方式
 
