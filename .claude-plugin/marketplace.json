@@ -1,0 +1,9 @@
+{
+  "name": "superpowers-flow-enforcer-marketplace",
+  "plugins": {
+    "superpowers-flow-enforcer": {
+      "version": "1.0.0",
+      "path": "."
+    }
+  }
+}
