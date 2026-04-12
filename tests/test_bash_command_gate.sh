@@ -9,6 +9,43 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 REPO_ROOT="$(pwd)"
 export CLAUDE_PLUGIN_ROOT="$REPO_ROOT"
+PARSER_TRACE_PRELOAD="$TMP_DIR/bash-gate-parser-trace.cjs"
+
+cat > "$PARSER_TRACE_PRELOAD" <<'EOF'
+const fs = require('fs');
+const Module = require('module');
+
+const originalLoad = Module._load;
+
+Module._load = function patchedLoad(request, parent, isMain) {
+  const loaded = originalLoad.apply(this, arguments);
+
+  if (
+    typeof request === 'string' &&
+    request.endsWith('/vendor/bash-traverse/dist/index.js') &&
+    loaded &&
+    !loaded.__bashGateTraceWrapped
+  ) {
+    const traceFile = process.env.BASH_GATE_TRACE_FILE;
+    if (traceFile) {
+      return {
+        ...loaded,
+        __bashGateTraceWrapped: true,
+        parse(...args) {
+          fs.appendFileSync(traceFile, 'parse\n');
+          return loaded.parse(...args);
+        },
+        traverse(...args) {
+          fs.appendFileSync(traceFile, 'traverse\n');
+          return loaded.traverse(...args);
+        },
+      };
+    }
+  }
+
+  return loaded;
+};
+EOF
 
 assert_file_exists "$REPO_ROOT/vendor/bash-traverse/upstream.json"
 
@@ -59,6 +96,25 @@ run_gate() {
     cwd:$cwd,
     tool_input:{command:$command}
   }' | bash "$REPO_ROOT/scripts/check-bash-command-gate.sh"
+}
+
+run_gate_with_parser_trace() {
+  local cwd="$1"
+  local command="$2"
+  local trace_file="$3"
+
+  rm -f "$trace_file"
+  NODE_OPTIONS="--require=$PARSER_TRACE_PRELOAD" \
+    BASH_GATE_TRACE_FILE="$trace_file" \
+    run_gate "$cwd" "$command"
+}
+
+assert_parser_used() {
+  local trace_file="$1"
+
+  assert_file_exists "$trace_file"
+  assert_file_contains "$trace_file" 'parse'
+  assert_file_contains "$trace_file" 'traverse'
 }
 
 INACTIVE_PROJECT="$TMP_DIR/inactive-project"
@@ -118,6 +174,168 @@ assert_allow "$allow_output"
 allow_output="$(
   BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
     run_gate "$ACTIVE_PROJECT" 'cat <<< "hi"'
+)"
+assert_allow "$allow_output"
+
+ACTIVE_TRACE_FILE="$TMP_DIR/active-parser-trace.log"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" 'cat .claude/flow_state.json' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" 'echo ok && cat .claude/flow_state.json' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" $'echo ok\ncat .claude/flow_state.json' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" '[ -f .claude/flow_state.json ]' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" '[[ -f .claude/flow_state.json ]]' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" 'echo $(cat .claude/flow_state.json)' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "bash -lc 'cat .claude/flow_state.json'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "sh -c 'cat .claude/flow_state.json'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "zsh -c 'cat .claude/flow_state.json'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "python -c 'open(\".claude/flow_state.json\").read()'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "python3 -c 'open(\".claude/flow_state.json\").read()'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "node -e 'require(\"fs\").readFileSync(\".claude/flow_state.json\", \"utf8\")'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "ruby -e 'File.read(\".claude/flow_state.json\")'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "perl -e 'open my \$fh, q{<}, q{.claude/flow_state.json}; print do { local \$/; <\$fh> }'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "cat .claude/'flow_state.json'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" 'cat .claude/"flow_state.json"' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "[ -f .claude/'flow_state.json' ]" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" 'cat .claude/flow_state\.json' "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "bash -lc 'cat .claude/'\"flow_state.json\"'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "python -c 'open(\".claude/\" \"flow_state.json\").read()'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "node -e 'require(\"fs\").readFileSync(\".claude/\" + \"flow_state.json\", \"utf8\")'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+deny_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate_with_parser_trace "$ACTIVE_PROJECT" "ruby -e 'File.read(%q{.claude/} + %q{flow_state.json})'" "$ACTIVE_TRACE_FILE"
+)"
+assert_deny "$deny_output" '.claude/flow_state.json'
+assert_parser_used "$ACTIVE_TRACE_FILE"
+
+allow_output="$(
+  BASH_GATE_NODE_BIN="$NODE_WRAPPER" \
+    run_gate "$ACTIVE_PROJECT" 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh brainstorming spec_written true'
 )"
 assert_allow "$allow_output"
 
