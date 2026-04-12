@@ -37,10 +37,12 @@ assert_stop_allow_silent() {
 run_stop_gate() {
   local cwd="$1"
   local stop_hook_active="${2:-false}"
-  jq -n --arg cwd "$cwd" --argjson stop_hook_active "$stop_hook_active" '{
+  local last_assistant_message="${3:-}"
+  jq -n --arg cwd "$cwd" --argjson stop_hook_active "$stop_hook_active" --arg last_assistant_message "$last_assistant_message" '{
     hook_event_name:"Stop",
     cwd:$cwd,
-    stop_hook_active:$stop_hook_active
+    stop_hook_active:$stop_hook_active,
+    last_assistant_message:$last_assistant_message
   }' | bash scripts/check-stop-review-gate.sh
 }
 
@@ -105,6 +107,9 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
 assert_stop_allow_silent "$allow_output"
 
+deny_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'Done. I fixed it and everything is working now.')"
+assert_stop_block "$deny_output" 'verification'
+
 write_v2_state "$STATE_FILE"
 jq '
   .workflow.active = true
@@ -121,6 +126,9 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 
 allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
 assert_stop_allow_silent "$allow_output"
+
+deny_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'Done. I fixed it and everything is working now.')"
+assert_stop_block "$deny_output" 'verification'
 
 write_v2_state "$STATE_FILE"
 jq '.workflow.active = true' "$STATE_FILE" > "$TMP_DIR/state.json"
@@ -155,6 +163,37 @@ jq '
   | .review.tasks = {
       "task-001": {
         "spec_review_passed": true,
+        "code_review_passed": true
+      }
+    }
+  | .finishing.invoked = true
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+
+deny_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'Done. I fixed it and everything is working now.')"
+assert_stop_block "$deny_output" 'verification'
+
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT" false $'Done.\nVerification:\nbash tests/test_stop_gates.sh\nPASS')"
+assert_stop_allow_silent "$allow_output"
+
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'I am still working on the stop gate.')"
+assert_stop_allow_silent "$allow_output"
+
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'Done. 12 passed, 0 failed.')"
+assert_stop_allow_silent "$allow_output"
+
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'This is a fixed-width parser issue.')"
+assert_stop_allow_silent "$allow_output"
+
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'The hostname resolved after retry.')"
+assert_stop_allow_silent "$allow_output"
+
+write_v2_state "$STATE_FILE"
+jq '
+  .workflow.active = true
+  | .review.tasks = {
+      "task-001": {
+        "spec_review_passed": true,
         "code_review_passed": false
       }
     }
@@ -171,61 +210,3 @@ assert_stop_allow_silent "$allow_output"
 rm -f "$STATE_FILE"
 allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
 assert_stop_allow_silent "$allow_output"
-
-unset CLAUDE_PROJECT_DIR
-
-python3 - <<'PY'
-import json
-import sys
-from pathlib import Path
-
-hooks = json.loads(Path('hooks/hooks.json').read_text(encoding='utf-8'))['hooks']
-stop_prompt = None
-for group in hooks.get('Stop', []):
-    for hook in group.get('hooks', []):
-        if hook.get('type') == 'prompt':
-            stop_prompt = hook.get('prompt', '')
-            break
-    if stop_prompt is not None:
-        break
-
-if stop_prompt is None:
-    sys.stderr.write('Expected Stop prompt hook to exist\n')
-    raise SystemExit(1)
-
-required_tokens = [
-    '$ARGUMENTS',
-    'Only use input values from $ARGUMENTS',
-    'Do not assume any file access.',
-    'last_assistant_message',
-    'stop_hook_active',
-    'completion keywords appear',
-    'fresh passing verification evidence',
-    'without fresh passing verification evidence in last_assistant_message',
-    'If completion keywords do not appear, return {"ok": true}.',
-    'If completion keywords appear and fresh passing verification evidence appears in last_assistant_message, return {"ok": true}.',
-]
-
-for token in required_tokens:
-    if token not in stop_prompt:
-        sys.stderr.write(f'Missing Stop prompt hook token: {token}\n')
-        raise SystemExit(1)
-
-if 'transcript' in stop_prompt.lower():
-    sys.stderr.write('Expected Stop prompt hook to remain input-only and avoid transcript references\n')
-    raise SystemExit(1)
-
-forbidden_tokens = [
-    'read the referenced state file',
-    'derive the state path',
-    'read the referenced transcript file',
-    'derive the transcript path',
-    'read cwd',
-    'read file',
-]
-
-for token in forbidden_tokens:
-    if token in stop_prompt:
-        sys.stderr.write(f'Expected Stop prompt hook to avoid file/cwd access hint: {token}\n')
-        raise SystemExit(1)
-PY

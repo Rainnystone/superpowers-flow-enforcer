@@ -64,10 +64,6 @@ for event_name, groups in hooks.items():
                     'prompt': hook.get('prompt', ''),
                 })
 
-if not model_hooks:
-    sys.stderr.write('Expected at least one model-driven hook\n')
-    raise SystemExit(1)
-
 for hook in model_hooks:
     prompt = hook['prompt']
     if '{"ok": true}' not in prompt:
@@ -95,30 +91,13 @@ for hook in model_hooks:
         sys.stderr.write(f"Expected prompt hook {hook['event']}/{hook['matcher']} to rely on $ARGUMENTS\n")
         raise SystemExit(1)
 
-expected_types = {
-    ('Stop', '*'): 'prompt',
-}
-
-for key, expected_type in expected_types.items():
-    event_name, matcher = key
-    found = [
-        hook for hook in model_hooks
-        if hook['event'] == event_name and hook['matcher'] == matcher
-    ]
-    if not found:
-        sys.stderr.write(f'Expected model-driven hook for {event_name}/{matcher}\n')
-        raise SystemExit(1)
-    if any(hook['type'] != expected_type for hook in found):
-        actual = ', '.join(sorted({hook['type'] for hook in found}))
-        sys.stderr.write(f'Expected {event_name}/{matcher} to use type:{expected_type}, got {actual}\n')
-        raise SystemExit(1)
-
-stop_prompt_hooks = [
+stop_model_hooks = [
     hook for hook in model_hooks
-    if hook['event'] == 'Stop' and hook['type'] == 'prompt'
+    if hook['event'] == 'Stop'
 ]
-if len(stop_prompt_hooks) != 1:
-    sys.stderr.write('Expected exactly one model-driven Stop prompt hook\n')
+if stop_model_hooks:
+    actual = ', '.join(sorted({hook['type'] for hook in stop_model_hooks}))
+    sys.stderr.write(f'Expected Stop to stop using model-driven hooks, got {actual}\n')
     raise SystemExit(1)
 
 inventory = {
@@ -238,64 +217,20 @@ if task_completed_hook.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/che
     raise SystemExit(1)
 
 stop_entries = hooks.get('Stop', [])
-if len(stop_entries) != 2:
-    sys.stderr.write('Expected exactly two Stop hook groups\n')
+if len(stop_entries) != 1:
+    sys.stderr.write('Expected exactly one Stop hook group\n')
     raise SystemExit(1)
 
-stop_group_inventory = {
-    hook.get('type', ''): hook
-    for group in stop_entries
-    for hook in group.get('hooks', [])
-}
-if set(stop_group_inventory.keys()) != {'prompt', 'command'}:
-    sys.stderr.write('Expected Stop to contain exactly one prompt hook and one command hook\n')
+stop_hooks = stop_entries[0].get('hooks', [])
+if len(stop_hooks) != 1:
+    sys.stderr.write('Expected Stop/* to have exactly one hook\n')
     raise SystemExit(1)
 
-stop_command = stop_group_inventory['command']
+stop_command = stop_hooks[0]
+if stop_command.get('type') != 'command':
+    sys.stderr.write('Expected Stop/* hook type to be command\n')
+    raise SystemExit(1)
 if stop_command.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-stop-review-gate.sh':
     sys.stderr.write('Expected Stop command hook to call scripts/check-stop-review-gate.sh\n')
-    raise SystemExit(1)
-
-stop_prompt = stop_group_inventory['prompt'].get('prompt', '')
-if '$ARGUMENTS' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to rely on $ARGUMENTS\n')
-    raise SystemExit(1)
-if 'Only use input values from $ARGUMENTS' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to explicitly require input-only behavior\n')
-    raise SystemExit(1)
-if 'Do not assume any file access.' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to explicitly forbid file access assumptions\n')
-    raise SystemExit(1)
-if 'last_assistant_message' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to explicitly rely on last_assistant_message\n')
-    raise SystemExit(1)
-if 'transcript' in stop_prompt.lower():
-    sys.stderr.write('Expected Stop prompt hook to stop assuming transcript file access\n')
-    raise SystemExit(1)
-for token in (
-    'read the referenced state file',
-    'derive the state path',
-    'read the referenced transcript file',
-    'derive the transcript path',
-    'read cwd',
-    'read file',
-):
-    if token in stop_prompt:
-        sys.stderr.write(f'Expected Stop prompt hook to avoid file/cwd access hint: {token}\n')
-        raise SystemExit(1)
-if 'completion keywords appear' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to encode completion-keyword detection\n')
-    raise SystemExit(1)
-if 'fresh passing verification evidence' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to encode freshness requirement\n')
-    raise SystemExit(1)
-if 'without fresh passing verification evidence in last_assistant_message' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to block stale completion claims using last_assistant_message\n')
-    raise SystemExit(1)
-if 'If completion keywords appear and fresh passing verification evidence appears in last_assistant_message, return {"ok": true}.' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to encode the fresh-evidence allow path\n')
-    raise SystemExit(1)
-if 'If completion keywords do not appear, return {"ok": true}.' not in stop_prompt:
-    sys.stderr.write('Expected Stop prompt hook to encode the non-completion allow path\n')
     raise SystemExit(1)
 PY

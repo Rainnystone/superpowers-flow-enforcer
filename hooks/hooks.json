@@ -98,16 +98,6 @@
         "matcher": "*",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Parse $ARGUMENTS as JSON. Only use input values from $ARGUMENTS, especially stop_hook_active and last_assistant_message. Do not assume any file access. If stop_hook_active is true, return {\"ok\": true}. Check whether completion keywords appear (done/complete/tests pass/fixed/working/完成/修复) in last_assistant_message. If completion keywords do not appear, return {\"ok\": true}. If completion keywords appear and fresh passing verification evidence appears in last_assistant_message, return {\"ok\": true}. If completion keywords appear but without fresh passing verification evidence in last_assistant_message, return {\"ok\": false, \"reason\": \"Completion claimed without fresh verification evidence. Run verification now and show output.\"}. Otherwise return {\"ok\": true}.",
-            "timeout": 30
-          }
-        ]
-      },
-      {
-        "matcher": "*",
-        "hooks": [
-          {
             "type": "command",
             "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-stop-review-gate.sh",
             "timeout": 10
