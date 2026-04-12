@@ -2,7 +2,7 @@
 
 [English](./README.md) | 中文
 
-一个 Claude Code 插件，在会话**明确进入** superpowers 工作流之后，通过 workflow-aware hooks 强制执行关键阶段。它是 [obra/superpowers](https://github.com/obra/superpowers) 的补充，不是替代品，并且这个仓库的工作流设计为与 [planning-with-files](https://github.com/othmanadi/planning-with-files) 配合使用来提供外部记忆。
+一个 Claude Code 插件，在会话**明确进入** superpowers 工作流之后，通过 workflow-aware hooks 强制执行关键阶段。它是 [obra/superpowers](https://github.com/obra/superpowers) 的补充，不是替代品，并且设计上需要配合 [planning-with-files](https://github.com/othmanadi/planning-with-files) 提供外部记忆。这个仓库仍然以单个插件的形式安装：Bash gate 使用仓库内 vendored 的 `vendor/bash-traverse` runtime，不需要额外 clone 或 build parser 仓库。
 
 ## 概述
 
@@ -17,27 +17,17 @@
 
 这里的“进入 workflow”是显式动作，不是对所有 Claude Code 会话一刀切推断。当前实现里，进入动作包括：记录 skip 请求，或写入 `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` 这类 canonical superpowers 工件。这些工件路径支持仓库相对路径、`./...` 形式，以及项目根目录下的绝对路径。
 
-`planning-with-files` 在这里提供持久化的外部记忆，通过 `task_plan.md`、`findings.md`、`progress.md` 记录状态。这个定位尤其适合 Claude Code 集成里路由到 GLM-5、只有 128K 上下文窗口的配置，因为磁盘上的追踪可以帮助长会话保持一致。
+`PreToolUse/Bash` 只有在 `workflow.active == true` 时才会运行真正的 gate；如果 workflow 没有激活，它会静默 no-op。激活后，Bash gate 通过 Node 执行 vendored 的 Bash parser runtime，因此需要 Node 18+。
+
+`planning-with-files` 仍然是这个工作流的预期组成部分，因为它提供 `task_plan.md`、`findings.md`、`progress.md` 这套持久化外部记忆。这个定位尤其适合 Claude Code 集成里路由到 GLM-5、只有 128K 上下文窗口的配置，磁盘上的记录可以降低长会话里的上下文丢失。
 
 ## 安装
 
-按这个顺序安装和使用：
+按预期工作流，建议把这三部分一起装好并使用：
 
-1. 先安装并使用 [obra/superpowers](https://github.com/obra/superpowers)。
-   ```
-   /plugin install superpowers@claude-plugins-official
-   ```
-   如果你使用社区 marketplace 版本：
-   ```
-   /plugin marketplace add obra/superpowers-marketplace
-   /plugin install superpowers@superpowers-marketplace
-   ```
-2. 再安装并使用 [planning-with-files](https://github.com/othmanadi/planning-with-files)，让项目具备 `task_plan.md`、`findings.md`、`progress.md` 这套持久记忆。
-   ```
-   /plugin marketplace add OthmanAdi/planning-with-files
-   /plugin install planning-with-files@planning-with-files
-   ```
-3. 从本地源码持久化安装这个插件：
+1. 安装并使用 [obra/superpowers](https://github.com/obra/superpowers)。
+2. 安装并使用 [planning-with-files](https://github.com/othmanadi/planning-with-files)。
+3. 从本地源码安装这个插件：
    ```
    /plugin marketplace add /absolute/path/to/superpowers-flow-enforcer
    /plugin install superpowers-flow-enforcer@superpowers-flow-enforcer-marketplace
@@ -50,22 +40,22 @@
    ```
    这种方式只在当前会话生效，不会写入安装注册表。
 
-4. 如果你在当前会话里安装或变更了其他插件，执行：
+如果你在当前会话里安装或变更了其他插件，执行：
    ```
    /reload-plugins
    ```
 
-顺序很重要：先有 superpowers，再配合 planning-with-files，最后安装这个插件。
+不需要额外 clone 或 build `bash-traverse`。它已经被 vendored 到这个仓库里；但激活中的 Bash gate 仍然要求运行 Claude Code 的机器上有 Node 18+。
 
 ## 使用方式
 
-在 brainstorming、spec、planning 和 execution 这几个阶段把三者一起用：
+在 brainstorming、spec、planning、execution、review 和 verification 阶段，建议把三者一起用：
 
-- `superpowers` 负责工作流和阶段纪律。
-- `planning-with-files` 把稳定状态写进 `task_plan.md`、`findings.md`、`progress.md`。
-- 这个插件负责在会话已经进入 superpowers workflow 后强制阶段衔接，避免跳过 brainstorming、planning、review 或 verification。
+- `superpowers` 提供工作流纪律。
+- `planning-with-files` 负责 `task_plan.md`、`findings.md`、`progress.md` 这套持久化外部记忆。
+- 这个插件在会话真正进入 superpowers workflow 后，负责强制阶段衔接和 no-skip 规则。
 
-实际操作时，先用 superpowers 做 brainstorming 和 spec，再把计划写入 planning-with-files，执行过程中持续更新 `progress.md`。如果用户根本没有进入 superpowers workflow，那么 workflow-only 门禁不会去阻断普通 Claude Code 工作流。
+插件不会对每个 Claude Code 会话强行激活 workflow。如果 workflow 从未激活，workflow-only 门禁会保持 inactive，不会阻断普通 Claude Code 工作。
 
 ## Hook 系统
 
@@ -75,12 +65,13 @@
 | UserPromptSubmit | * | Bypass / 中断检测 + 缺失状态自举 |
 | PreToolUse | Edit\|Write | workflow-aware 写入门禁 + TDD 铁律 |
 | PreToolUse | AskUserQuestion | 仅在 workflow 激活时要求更新 Brainstorming findings |
+| PreToolUse | Bash | 只有 `workflow.active == true` 时才执行 Bash gate，否则静默 no-op |
 | PostToolUse | Write\|Edit | SPEC 自审要求 |
 | PostToolUse | Write | Plan → Worktree 转换 |
 | PostToolUse | Bash | Worktree → 基准测试 |
 | PostToolUse | TaskCompleted | 仅在 workflow 激活时要求两阶段审查完成 |
 | PostToolUseFailure | Bash | 测试失败时系统化调试 |
-| Stop | * | 基于 transcript 的完成验证 + workflow-aware 停止门禁 |
+| Stop | * | 仅 command-only 完成验证，依据 `last_assistant_message` + workflow-aware 停止门禁 |
 
 ## TDD 强制执行（最关键）
 
@@ -135,7 +126,7 @@ PreToolUse hook 执行 TDD 铁律：
 ## 完成前验证
 
 声明完成时（"完成", "tests pass", "修复了"）：
-- 必须展示**新鲜**验证证据（当前消息的测试输出）
+- 必须在当前 assistant message 中展示**新鲜**验证证据
 - 不能用"上次通过了"或"应该没问题"
 - Stop hook 会阻断无新鲜证据的声明
 
@@ -155,9 +146,16 @@ scripts/
 ├── update-state.sh    # 状态更新辅助脚本
 ├── sync-user-prompt-state.sh # UserPromptSubmit 状态同步
 ├── sync-post-tool-state.sh   # PostToolUse 状态同步
+├── check-pretool-gates.sh # PreToolUse/Edit|Write 和 AskUserQuestion gate
+├── check-bash-command-gate.sh # PreToolUse/Bash gate
+├── check-bash-command-gate-node.cjs # vendored bash-traverse 分析 runtime
+├── check-task-completed.sh # TaskCompleted gate
+├── check-stop-review-gate.sh # Stop 完成验证 gate
 └── check-exception.sh # 历史辅助脚本（当前 hooks 不调用）
 templates/
 └── flow_state.json.tmpl # 状态文件模板
+vendor/
+└── bash-traverse/      # Bash gate 使用的 vendored parser/runtime
 ```
 
 ## 状态追踪
@@ -197,6 +195,8 @@ templates/
 **意外被阻断**: 检查状态文件的当前阶段状态。可能需要先完成前一阶段。
 
 **为什么 workflow 门禁没生效**: 先确认当前会话是否真的进入了 superpowers workflow，比如是否记录了 skip 请求，或者是否写入了 `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`。
+
+**Bash gate 提示需要 Node**: 安装 Node 18+，或者确保 `node` 在 `PATH` 里。激活中的 Bash gate 会通过 Node 运行 vendored 的 parser runtime。
 
 **Bypass 不生效**: 确保清楚说明了理由。插件需要确认。
 
