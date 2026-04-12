@@ -1,0 +1,1 @@
+{"version":3,"file":"generateComment.js","sourceRoot":"","sources":["../../../src/generators/core/generateComment.ts"],"names":[],"mappings":";;AAOA,0CAQC;AAdD,sCAAsC;AAEtC;;;GAGG;AACH,SAAgB,eAAe,CAAC,OAAgB;IAC9C,MAAM,MAAM,GAAG,IAAA,kBAAS,GAAE,CAAC;IAE3B,IAAI,CAAC,MAAM,CAAC,QAAQ,EAAE,CAAC;QACrB,OAAO,EAAE,CAAC;IACZ,CAAC;IAED,OAAO,OAAO,CAAC,KAAK,CAAC;AACvB,CAAC"}

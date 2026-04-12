@@ -1,0 +1,1 @@
+{"version":3,"file":"generateBlock.js","sourceRoot":"","sources":["../../../src/generators/structural/generateBlock.ts"],"names":[],"mappings":";AAAA;;GAEG;;AAEH,gDAEC;AAED,4CAEC;AAED,0DAEC;AAVD,SAAgB,kBAAkB;IAChC,OAAO,GAAG,CAAC;AACb,CAAC;AAED,SAAgB,gBAAgB;IAC9B,OAAO,GAAG,CAAC;AACb,CAAC;AAED,SAAgB,uBAAuB;IACrC,OAAO,UAAU,CAAC;AACpB,CAAC"}

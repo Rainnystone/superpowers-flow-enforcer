@@ -1,0 +1,1 @@
+{"version":3,"file":"generateVariableAssignment.js","sourceRoot":"","sources":["../../../src/generators/core/generateVariableAssignment.ts"],"names":[],"mappings":";;AAOA,gEAEC;AARD,iDAA8C;AAE9C;;;GAGG;AACH,SAAgB,0BAA0B,CAAC,UAA8B;IACvE,OAAO,GAAG,IAAA,2BAAY,EAAC,UAAU,CAAC,IAAI,CAAC,IAAI,IAAA,2BAAY,EAAC,UAAU,CAAC,KAAK,CAAC,EAAE,CAAC;AAC9E,CAAC"}

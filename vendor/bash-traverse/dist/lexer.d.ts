@@ -1,0 +1,45 @@
+import { Token } from './types';
+export declare class BashLexer {
+    private source;
+    private position;
+    private line;
+    private column;
+    private tokens;
+    constructor(source: string);
+    tokenize(): Token[];
+    private basicTokenize;
+    private isAtEnd;
+    private peek;
+    private peekNext;
+    private advance;
+    private isWhitespace;
+    private isWordStart;
+    private isOperator;
+    private isTestOperator;
+    private readComment;
+    private readShebang;
+    private readString;
+    private readExpansion;
+    private readBacktick;
+    private readParentheses;
+    private readBrackets;
+    private readBraces;
+    private readTestOperator;
+    private isUnaryTestOperator;
+    private isBinaryTestOperator;
+    private isBooleanOperator;
+    private readOperator;
+    private readSpace;
+    private readBackslash;
+    private readWord;
+    private getShellLevelTokenType;
+    private getControlKeywordType;
+    private createPosition;
+    private createLocation;
+    private addToken;
+    private postProcessHeredocs;
+    private extractHeredocContent;
+    private postProcessRegexPatterns;
+    private postProcessFunctionTokens;
+}
+//# sourceMappingURL=lexer.d.ts.map

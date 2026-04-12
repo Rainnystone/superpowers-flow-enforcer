@@ -50,8 +50,8 @@
         "matcher": "Bash",
         "hooks": [
           {
-            "type": "prompt",
-            "prompt": "Parse $ARGUMENTS as JSON and read command from the hook input. If command directly reads/writes .claude/flow_state.json and does NOT call ${CLAUDE_PLUGIN_ROOT}/scripts/update-state.sh, return {\"ok\": false, \"reason\": \"禁止直接操作 flow_state.json，请通过 update-state.sh。\"}. Else return {\"ok\": true}.",
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-bash-command-gate.sh",
             "timeout": 30
           }
         ]

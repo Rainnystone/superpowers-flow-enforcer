@@ -1,0 +1,1 @@
+{"version":3,"file":"generateCase.d.ts","sourceRoot":"","sources":["../../../src/generators/control-flow/generateCase.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,UAAU,EAAE,MAAM,aAAa,CAAC;AAQxD;;;GAGG;AACH,wBAAgB,qBAAqB,CAAC,aAAa,EAAE,aAAa,GAAG,MAAM,CAsC1E;AAED;;;GAGG;AACH,wBAAgB,kBAAkB,CAAC,UAAU,EAAE,UAAU,GAAG,MAAM,CA+BjE"}

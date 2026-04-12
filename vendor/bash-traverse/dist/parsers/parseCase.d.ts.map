@@ -1,0 +1,1 @@
+{"version":3,"file":"parseCase.d.ts","sourceRoot":"","sources":["../../src/parsers/parseCase.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,aAAa,EAAE,UAAU,EAAE,MAAM,UAAU,CAAC;AACrD,OAAO,EAAE,UAAU,EAAE,MAAM,SAAS,CAAC;AAErC;;;GAGG;AACH,wBAAgB,kBAAkB,CAAC,MAAM,EAAE,UAAU,GAAG,aAAa,CAgHpE;AAID;;;GAGG;AACH,wBAAgB,eAAe,CAAC,MAAM,EAAE,UAAU,GAAG,UAAU,GAAG,IAAI,CAqGrE"}

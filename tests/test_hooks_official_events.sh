@@ -96,7 +96,6 @@ for hook in model_hooks:
         raise SystemExit(1)
 
 expected_types = {
-    ('PreToolUse', 'Bash'): 'prompt',
     ('Stop', '*'): 'prompt',
 }
 
@@ -135,6 +134,12 @@ if ('PreToolUse', 'Edit|Write', 'command') not in inventory:
 if ('PreToolUse', 'AskUserQuestion', 'command') not in inventory:
     sys.stderr.write('Expected PreToolUse/AskUserQuestion to use command hook\n')
     raise SystemExit(1)
+if ('PreToolUse', 'Bash', 'command') not in inventory:
+    sys.stderr.write('Expected PreToolUse/Bash to use command hook\n')
+    raise SystemExit(1)
+if ('PreToolUse', 'Bash', 'prompt') in inventory:
+    sys.stderr.write('Expected PreToolUse/Bash to stop using prompt hook\n')
+    raise SystemExit(1)
 if ('PreToolUse', 'Edit|Write', 'agent') in inventory:
     sys.stderr.write('Expected PreToolUse/Edit|Write to stop using agent hook\n')
     raise SystemExit(1)
@@ -165,6 +170,20 @@ pretool_entries = {
     group.get('matcher', '*'): group.get('hooks', [])
     for group in hooks.get('PreToolUse', [])
 }
+bash_pretool_hooks = pretool_entries.get('Bash', [])
+if len(bash_pretool_hooks) != 1:
+    sys.stderr.write('Expected PreToolUse/Bash to have exactly one hook\n')
+    raise SystemExit(1)
+bash_pretool_hook = bash_pretool_hooks[0]
+if bash_pretool_hook.get('type') != 'command':
+    sys.stderr.write('Expected PreToolUse/Bash hook type to be command\n')
+    raise SystemExit(1)
+if bash_pretool_hook.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/check-bash-command-gate.sh':
+    sys.stderr.write('Expected PreToolUse/Bash command hook to call scripts/check-bash-command-gate.sh\n')
+    raise SystemExit(1)
+if 'prompt' in bash_pretool_hook:
+    sys.stderr.write('Expected PreToolUse/Bash to stop using prompt hook wiring\n')
+    raise SystemExit(1)
 for matcher in ('Edit|Write', 'AskUserQuestion'):
     group_hooks = pretool_entries.get(matcher, [])
     if len(group_hooks) != 1:
@@ -278,16 +297,5 @@ if 'If completion keywords appear and fresh passing verification evidence appear
     raise SystemExit(1)
 if 'If completion keywords do not appear, return {"ok": true}.' not in stop_prompt:
     sys.stderr.write('Expected Stop prompt hook to encode the non-completion allow path\n')
-    raise SystemExit(1)
-
-bash_prompt = next(
-    hook['prompt'] for hook in model_hooks
-    if hook['event'] == 'PreToolUse' and hook['matcher'] == 'Bash'
-)
-if '$ARGUMENTS' not in bash_prompt:
-    sys.stderr.write('Expected PreToolUse/Bash prompt hook to use $ARGUMENTS\n')
-    raise SystemExit(1)
-if 'derive the state path' in bash_prompt or 'read the referenced state file' in bash_prompt:
-    sys.stderr.write('Expected PreToolUse/Bash prompt hook to avoid file inspection behavior\n')
     raise SystemExit(1)
 PY
