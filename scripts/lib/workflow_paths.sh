@@ -122,7 +122,9 @@ workflow_paths_normalize_project_relative_path() {
   local hook_cwd="${3:-}"
   local candidate=""
   local candidate_physical=""
+  local physical_outside_project="false"
   local hook_cwd_physical=""
+  local base_dir_physical=""
   local rel_path=""
   local root_alias=""
 
@@ -136,8 +138,8 @@ workflow_paths_normalize_project_relative_path() {
     candidate_physical="$(workflow_paths__normalize_absolute_path "$candidate" || true)"
     if [ -n "$candidate_physical" ] && [[ "$candidate_physical" == "$project_root"/* ]]; then
       rel_path="${candidate_physical#"$project_root"/}"
-    elif [[ "$candidate" == "$project_root"/* ]]; then
-      rel_path="${candidate#"$project_root"/}"
+    elif [ -n "$candidate_physical" ]; then
+      physical_outside_project="true"
     else
       for root_alias in \
         "$(workflow_paths_resolve_state_root_alias_from_candidate "${CLAUDE_PROJECT_DIR:-}")" \
@@ -152,17 +154,29 @@ workflow_paths_normalize_project_relative_path() {
   else
     if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then
       hook_cwd_physical="$(cd "$hook_cwd" 2>/dev/null && pwd -P)" || hook_cwd_physical=""
-      if [ -n "$hook_cwd_physical" ]; then
-        candidate_physical="$(workflow_paths__normalize_absolute_path "$hook_cwd_physical/$candidate" || true)"
-        if [ -n "$candidate_physical" ] && [[ "$candidate_physical" == "$project_root"/* ]]; then
-          rel_path="${candidate_physical#"$project_root"/}"
-        fi
+    fi
+
+    base_dir_physical="$hook_cwd_physical"
+    if [ -z "$base_dir_physical" ]; then
+      base_dir_physical="$project_root"
+    fi
+
+    if [ -n "$base_dir_physical" ]; then
+      candidate_physical="$(workflow_paths__normalize_absolute_path "$base_dir_physical/$candidate" || true)"
+      if [ -n "$candidate_physical" ] && [[ "$candidate_physical" == "$project_root"/* ]]; then
+        rel_path="${candidate_physical#"$project_root"/}"
+      elif [ -n "$candidate_physical" ]; then
+        physical_outside_project="true"
       fi
     fi
 
     if [ -z "$rel_path" ]; then
       rel_path="$candidate"
     fi
+  fi
+
+  if [ "$physical_outside_project" = "true" ]; then
+    return
   fi
 
   if [ -z "$rel_path" ]; then

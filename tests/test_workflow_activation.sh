@@ -263,6 +263,26 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.acti
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' 'null'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
 
+mkdir -p "$TMP_DIR/outside-symlink-target/docs/superpowers/plans"
+mkdir -p "$TMP_DIR/outside-symlink-target/docs/superpowers/specs"
+ln -s "$TMP_DIR/outside-symlink-target" "$CLAUDE_PROJECT_DIR/link-outside"
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"'$CLAUDE_PROJECT_DIR'/link-outside/docs/superpowers/plans/2026-04-11-escape-demo.md"}}' \
+  | bash scripts/sync-post-tool-state.sh >/dev/null
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"link-outside/docs/superpowers/specs/2026-04-11-escape-demo.md"}}' \
+  | bash scripts/sync-post-tool-state.sh >/dev/null
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
+
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 jq '.workflow.override = "manual_off" | .workflow.active = false' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp"
 mv "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
