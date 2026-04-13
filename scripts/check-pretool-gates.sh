@@ -13,6 +13,10 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 INIT_STATE_SCRIPT="$SCRIPT_DIR/init-state.sh"
+WORKFLOW_PATHS_LIB="$SCRIPT_DIR/lib/workflow_paths.sh"
+
+# shellcheck source=/dev/null
+source "$WORKFLOW_PATHS_LIB"
 
 hook_cwd_from_input() {
   printf '%s' "$INPUT" | jq -r '
@@ -25,65 +29,11 @@ hook_cwd_from_input() {
 }
 
 resolve_state_root_from_candidate() {
-  local candidate="$1"
-  if [ -z "$candidate" ]; then
-    return
-  fi
-
-  local current="$candidate"
-  if [ ! -d "$current" ]; then
-    current="$(dirname "$current")"
-  fi
-
-  if [ ! -d "$current" ]; then
-    return
-  fi
-
-  current="$(cd "$current" 2>/dev/null && pwd -P)" || return
-
-  while :; do
-    if [ -f "$current/.claude/flow_state.json" ]; then
-      printf '%s\n' "$current"
-      return
-    fi
-
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
-  done
+  workflow_paths_resolve_state_root_from_candidate "${1:-}"
 }
 
 resolve_logical_state_root_from_candidate() {
-  local candidate="$1"
-  if [ -z "$candidate" ]; then
-    return
-  fi
-
-  local current="$candidate"
-  if [ ! -d "$current" ]; then
-    current="$(dirname "$current")"
-  fi
-
-  if [ ! -d "$current" ]; then
-    return
-  fi
-
-  current="$(cd "$current" 2>/dev/null && pwd)" || return
-
-  while :; do
-    if [ -f "$current/.claude/flow_state.json" ]; then
-      printf '%s\n' "$current"
-      return
-    fi
-
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
-  done
+  workflow_paths_resolve_state_root_alias_from_candidate "${1:-}"
 }
 
 resolve_project_dir() {
@@ -175,14 +125,19 @@ state_is_true() {
   jq -e "$expr == true" "$STATE_FILE" >/dev/null 2>&1
 }
 
+canonical_workflow_artifact_type() {
+  local path="$1"
+  workflow_paths_classify_canonical_write "$path"
+}
+
 is_spec_or_plan_entry_path() {
   local path="$1"
-  [[ "$path" =~ ^docs/superpowers/specs/.*\.md$ || "$path" =~ ^docs/superpowers/plans/.*\.md$ ]]
+  [ "$(canonical_workflow_artifact_type "$path")" != "none" ]
 }
 
 is_plan_path() {
   local path="$1"
-  [[ "$path" =~ ^docs/superpowers/plans/.*\.md$ ]]
+  [ "$(canonical_workflow_artifact_type "$path")" = "plan" ]
 }
 
 is_exception_path() {

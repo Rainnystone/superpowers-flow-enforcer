@@ -84,11 +84,20 @@ assert_pretool_allow "$allow_output"
 allow_output="$(run_write_gate "$CLAUDE_PROJECT_DIR/docs/superpowers/plans/plan.md")"
 assert_pretool_allow "$allow_output"
 
+allow_output="$(run_write_gate 'simulation-toolset/docs/superpowers/specs/spec.md')"
+assert_pretool_allow "$allow_output"
+
+allow_output="$(run_write_gate 'packages/tooling/docs/superpowers/plans/plan.md')"
+assert_pretool_allow "$allow_output"
+
 write_v2_state "$STATE_FILE"
 jq '.workflow.active = true' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
 
 deny_output="$(run_write_gate 'docs/superpowers/plans/plan.md')"
+assert_pretool_deny "$deny_output" 'spec review'
+
+deny_output="$(run_write_gate 'packages/tooling/docs/superpowers/plans/plan.md')"
 assert_pretool_deny "$deny_output" 'spec review'
 
 write_v2_state "$STATE_FILE"
@@ -110,6 +119,28 @@ deny_output="$(run_write_gate 'src/app.ts')"
 assert_pretool_deny "$deny_output" 'brainstorming/SPEC'
 
 allow_output="$(run_write_gate 'docs/notes.md')"
+assert_pretool_allow "$allow_output"
+
+write_v2_state "$STATE_FILE"
+jq '
+  .workflow.active = true
+  | .brainstorming.spec_written = false
+  | .worktree.created = false
+  | .worktree.baseline_verified = false
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+
+allow_output="$(run_write_gate 'simulation-toolset/docs/superpowers/specs/spec.md')"
+assert_pretool_allow "$allow_output"
+
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+
+allow_output="$(run_write_gate 'tests/testdata/docs/superpowers/plans/plan.md')"
+assert_pretool_allow "$allow_output"
+
+allow_output="$(run_write_gate '.git/cache/docs/superpowers/plans/plan.md')"
 assert_pretool_allow "$allow_output"
 
 write_v2_state "$STATE_FILE"
