@@ -6,9 +6,9 @@
 
 The plugin uses Claude Code hooks to enforce workflow only after explicit workflow entry:
 
-- **Workflow Entry**: The current implementation treats skip requests, the explicit prompt `激活 superpowers enforcer`, and canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` writes within the current project scope as entry signals. Root-level canonical paths remain valid, subtree canonical paths such as `packages/foo/docs/superpowers/specs/*.md` also activate, and excluded trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata do not.
+- **Workflow Entry**: The current implementation treats skip requests, the explicit prompts `激活 superpowers enforcer` / `activate superpowers enforcer`, and canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` writes within the current project scope as entry signals. Root-level canonical paths remain valid, subtree canonical paths such as `packages/foo/docs/superpowers/specs/*.md` also activate, and excluded trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata do not.
 - **Pre-Activation Behavior**: If the session never enters the workflow, workflow-only gates stay inactive and ordinary Claude Code work is not blocked by those phase checks.
-- **Manual Control**: `激活 superpowers enforcer` turns workflow enforcement on explicitly. `关闭 superpowers enforcer` turns it off explicitly and prevents passive path-based reactivation until a new explicit workflow-intent signal appears.
+- **Manual Control**: `激活 superpowers enforcer` / `activate superpowers enforcer` turns workflow enforcement on explicitly. `关闭 superpowers enforcer` / `deactivate superpowers enforcer` turns it off explicitly and prevents passive path-based reactivation until a new explicit workflow-intent signal appears.
 - **Bash Runtime**: `PreToolUse/Bash` is command-only, silent while `workflow.active != true`, and uses the vendored `vendor/bash-traverse` runtime through Node 18+ once the workflow is active.
 - **Brainstorming / Planning**: After activation, SPEC writing still requires self-review and user approval before planning can proceed.
 - **TDD Phase**: Production code is blocked without a verified failing test.

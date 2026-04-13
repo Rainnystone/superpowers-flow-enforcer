@@ -129,7 +129,7 @@ split_manual_control_clauses() {
 
 is_manual_control_clause_start() {
   case "$1" in
-    ""|请|请先|先|然后|再|接着|随后|请再|麻烦|麻烦请|请帮我|请直接)
+    ""|请|请先|先|然后|再|接着|随后|请再|麻烦|麻烦请|请帮我|请直接|please|please\ just|just|then|and\ then|now)
       return 0
       ;;
   esac
@@ -139,7 +139,7 @@ is_manual_control_clause_start() {
 
 is_manual_control_clause_continuation() {
   case "$1" in
-    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*)
+    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|please*)
       return 0
       ;;
   esac
@@ -149,7 +149,7 @@ is_manual_control_clause_continuation() {
 
 is_manual_control_clause_explanatory() {
   case "$1" in
-    *不要*|*别*|*不是*|*如果*|*假如*|*说明*|*解释*|*含义*|*意思*|*例子*|*举例*|*比如*|*例如*|*会做什么*|*什么意思*)
+    *不要*|*别*|*不是*|*如果*|*假如*|*说明*|*解释*|*含义*|*意思*|*例子*|*举例*|*比如*|*例如*|*会做什么*|*什么意思*|*do\ not*|*don\'t*|*not*|*if*|*suppose*|*explain*|*meaning*|*example*|*for\ example*|*what\ will*|*what\ does*|*what\ happens*|*what\ would*)
       return 0
       ;;
   esac
@@ -167,7 +167,7 @@ matches_manual_control_phrase() {
     if [ -n "$clause" ]; then
       clauses+=("$clause")
     fi
-  done < <(split_manual_control_clauses "$PROMPT_NORMALIZED")
+  done < <(split_manual_control_clauses "$PROMPT_LC")
 
   local clause_index
   for clause_index in "${!clauses[@]}"; do
@@ -265,11 +265,11 @@ emit_skip_block_json() {
 }
 
 is_manual_deactivate_prompt() {
-  matches_manual_control_phrase "关闭 superpowers enforcer"
+  matches_manual_control_phrase "关闭 superpowers enforcer" || matches_manual_control_phrase "deactivate superpowers enforcer"
 }
 
 is_manual_activate_prompt() {
-  matches_manual_control_phrase "激活 superpowers enforcer"
+  matches_manual_control_phrase "激活 superpowers enforcer" || matches_manual_control_phrase "activate superpowers enforcer"
 }
 
 confirmation_phase=""

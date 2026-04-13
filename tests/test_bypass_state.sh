@@ -275,12 +275,53 @@ if [ "$STATE_SNAPSHOT_AFTER_NEGATIVE_COLON_EXPLAIN" != "$STATE_SNAPSHOT_BEFORE_N
   exit 1
 fi
 
+NEGATIVE_ENGLISH_QUESTION_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"If the user says activate superpowers enforcer, what will this hook do?"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_ENGLISH_QUESTION_OUTPUT" ]; then
+  echo "Expected English explanatory activate prompt to be silent allow" >&2
+  exit 1
+fi
+STATE_SNAPSHOT_AFTER_NEGATIVE_ENGLISH_QUESTION="$(jq -c . "$STATE_FILE")"
+if [ "$STATE_SNAPSHOT_AFTER_NEGATIVE_ENGLISH_QUESTION" != "$STATE_SNAPSHOT_BEFORE_NEGATIVE_PROMPTS" ]; then
+  echo "Expected English explanatory activate prompt to keep state unchanged" >&2
+  exit 1
+fi
+
+NEGATIVE_ENGLISH_COLON_EXPLAIN_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain: deactivate superpowers enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_ENGLISH_COLON_EXPLAIN_OUTPUT" ]; then
+  echo "Expected English explanatory deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+STATE_SNAPSHOT_AFTER_NEGATIVE_ENGLISH_COLON_EXPLAIN="$(jq -c . "$STATE_FILE")"
+if [ "$STATE_SNAPSHOT_AFTER_NEGATIVE_ENGLISH_COLON_EXPLAIN" != "$STATE_SNAPSHOT_BEFORE_NEGATIVE_PROMPTS" ]; then
+  echo "Expected English explanatory deactivate prompt to keep state unchanged" >&2
+  exit 1
+fi
+
 MID_SENTENCE_ACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"先整理上下文，然后激活 superpowers enforcer 再继续"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
 if [ -n "$MID_SENTENCE_ACTIVATE_OUTPUT" ]; then
   echo "Expected mid-sentence activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+
+ENGLISH_MID_SENTENCE_ACTIVATE_OUTPUT="$(
+  write_v2_state "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"First summarize context, then activate superpowers enforcer and continue"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$ENGLISH_MID_SENTENCE_ACTIVATE_OUTPUT" ]; then
+  echo "Expected English mid-sentence activate prompt to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
@@ -299,6 +340,19 @@ assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
 
+ENGLISH_POLITE_ACTIVATE_OUTPUT="$(
+  write_v2_state "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please activate superpowers enforcer, thanks"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$ENGLISH_POLITE_ACTIVATE_OUTPUT" ]; then
+  echo "Expected English polite activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+
 MID_SENTENCE_DEACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"先完成收尾，然后关闭 superpowers enforcer 再返回"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
@@ -311,12 +365,40 @@ assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
 assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
 
+ENGLISH_MID_SENTENCE_DEACTIVATE_OUTPUT="$(
+  jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt"' "$STATE_FILE" > "$STATE_FILE.tmp"
+  mv "$STATE_FILE.tmp" "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"First wrap up, then deactivate superpowers enforcer and return"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$ENGLISH_MID_SENTENCE_DEACTIVATE_OUTPUT" ]; then
+  echo "Expected English mid-sentence deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+
 POLITE_DEACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"请关闭 superpowers enforcer，谢谢"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
 if [ -n "$POLITE_DEACTIVATE_OUTPUT" ]; then
   echo "Expected polite deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+
+ENGLISH_POLITE_DEACTIVATE_OUTPUT="$(
+  jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt"' "$STATE_FILE" > "$STATE_FILE.tmp"
+  mv "$STATE_FILE.tmp" "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please deactivate superpowers enforcer, thanks"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$ENGLISH_POLITE_DEACTIVATE_OUTPUT" ]; then
+  echo "Expected English polite deactivate prompt to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
