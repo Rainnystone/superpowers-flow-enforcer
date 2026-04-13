@@ -185,6 +185,34 @@ Instead, path resolution should work like this:
 2. require the resolved target to remain inside that project root
 3. evaluate the normalized project-relative path
 
+### Source of truth for the current project root
+
+This round must use one concrete root-resolution algorithm shared with the existing command-hook state logic.
+
+The current project root is defined as:
+
+1. start from `CLAUDE_PROJECT_DIR` when it is available
+2. otherwise start from hook input `cwd`
+3. canonicalize that starting candidate to a physical directory path
+4. walk upward until the nearest directory containing `.claude/flow_state.json`
+5. if such a directory is found, that directory is the current project root
+6. if no such directory is found, fall back to the canonicalized starting candidate itself
+
+This keeps activation aligned with the same project root that existing command hooks already use for state lookup.
+
+### Path comparison semantics
+
+Path matching must not be string-only.
+
+Instead:
+
+1. relative target paths are interpreted against the resolved current project root
+2. absolute target paths are canonicalized to the same physical path space as the resolved current project root
+3. alias-mixed or symlink-mixed paths that resolve to the same physical target must be treated as the same project path
+4. once the physical project root is known, the implementation may compute a normalized project-relative path lexically, but only after the root itself has been physically resolved
+
+This is the intended behavior behind the required root-relative, absolute, alias-mixed, and cwd-derived tests.
+
 The relative path should auto-activate when, after normalization, it remains inside the current project root and its project-relative path ends with either:
 
 1. `docs/superpowers/specs/<filename>.md`
