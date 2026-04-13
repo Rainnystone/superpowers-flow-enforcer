@@ -85,12 +85,12 @@ That means paths such as these should all be valid activation signals:
 2. `simulation-toolset/docs/superpowers/specs/2026-04-13-demo.md`
 3. `packages/tooling/docs/superpowers/plans/2026-04-13-demo.md`
 
-The rule is about the canonical suffix:
+The rule is about the canonical suffix of the normalized project-relative path:
 
-1. `**/docs/superpowers/specs/*.md`
-2. `**/docs/superpowers/plans/*.md`
+1. it must end with `docs/superpowers/specs/<filename>.md`
+2. or it must end with `docs/superpowers/plans/<filename>.md`
 
-within the current project scope.
+Root-level canonical paths are the zero-prefix case of the same rule.
 
 ### 3. Add explicit user-controlled activation and deactivation
 
@@ -140,19 +140,40 @@ When `UserPromptSubmit` contains `关闭 superpowers enforcer`, the plugin shoul
 
 When a successful `Write` or `Edit` targets a canonical superpowers spec or plan document inside the current project scope, the plugin should auto-activate workflow if and only if there is no active manual-off override.
 
+### Existing skip-style prompt activation remains explicit intent
+
+This round does not retire the existing skip-style prompt handling such as:
+
+1. `skip brainstorming`
+2. `skip planning`
+3. `skip tdd`
+4. `skip review`
+5. `skip finishing`
+
+Those prompts already represent explicit workflow intent in the current product. They should continue to count as explicit prompt-driven activation, not passive auto-activation.
+
+That means:
+
+1. skip-style prompt activation is still allowed to set workflow active
+2. skip-style prompt activation clears a prior manual-off override, because the user has issued a new explicit workflow-intent prompt
+3. manual-off only blocks passive canonical-path auto-activation, not later explicit workflow-intent prompts
+
 ## B. Activation priority
 
 Priority must be explicit and deterministic:
 
-1. manual deactivation wins
-2. manual activation is next
-3. canonical path auto-activation is fallback only
+1. manual deactivation wins over passive auto-activation
+2. later explicit workflow-intent prompts win over a previous manual deactivation
+3. explicit manual activation is explicit workflow intent
+4. existing skip-style prompt activation is also explicit workflow intent
+5. canonical path auto-activation is fallback only
 
 That means:
 
 1. if the user has manually deactivated, later matching spec/plan writes must not silently turn enforcement back on
-2. if the user has manually activated, workflow stays active even before any spec/plan artifact exists
-3. if there is no manual override, canonical artifact writes can activate workflow automatically
+2. if the user later issues `激活 superpowers enforcer`, workflow turns back on immediately
+3. if the user later issues a skip-style workflow prompt, workflow also turns back on immediately because that is explicit workflow intent
+4. if there is no manual-off override, canonical artifact writes can activate workflow automatically
 
 ## C. Current project scope
 
@@ -164,14 +185,16 @@ Instead, path resolution should work like this:
 2. require the resolved target to remain inside that project root
 3. evaluate the normalized project-relative path
 
-The relative path should auto-activate when it matches either:
+The relative path should auto-activate when, after normalization, it remains inside the current project root and its project-relative path ends with either:
 
-1. `docs/superpowers/specs/*.md`
-2. `docs/superpowers/plans/*.md`
-3. `*/docs/superpowers/specs/*.md`
-4. `*/docs/superpowers/plans/*.md`
+1. `docs/superpowers/specs/<filename>.md`
+2. `docs/superpowers/plans/<filename>.md`
 
-with root-level canonical paths treated as the zero-prefix case.
+Examples:
+
+1. `docs/superpowers/specs/2026-04-13-demo.md`
+2. `simulation-toolset/docs/superpowers/specs/2026-04-13-demo.md`
+3. `packages/tooling/docs/superpowers/plans/2026-04-13-demo.md`
 
 ### Default exclusions
 
@@ -231,6 +254,14 @@ Auto-activate from canonical artifact:
 
 This preserves the user's explicit stop request.
 
+Skip-style prompt activation:
+
+1. `.workflow.active = true`
+2. `.workflow.override = null`
+3. keep the existing skip-specific exception bookkeeping
+4. record `activated_by = "user_prompt_skip"`
+5. update `activated_at`
+
 ## E. Scope of this activation round
 
 This round intentionally stops at activation behavior.
@@ -240,6 +271,7 @@ It must not silently broaden into a second unrelated enforcement redesign. In pa
 1. it does not yet make Bash file writes equivalent to `Write/Edit` for worktree or TDD gates
 2. it does not reinterpret ordinary `docs/*.md` writes as workflow activation
 3. it does not infer activation from vague superpowers-like wording beyond the approved exact phrases
+4. it does not retire the existing skip-style prompt activation behavior in this round
 
 That separate Bash file-write loophole is real, but it should be handled in a later focused spec so the activation work remains simple and verifiable.
 
@@ -273,8 +305,9 @@ This work is complete only when all of the following are true:
 6. out-of-project canonical-looking paths do not auto-activate
 7. `激活 superpowers enforcer` activates workflow immediately through `UserPromptSubmit`
 8. `关闭 superpowers enforcer` deactivates workflow immediately through `UserPromptSubmit`
-9. after manual deactivation, later canonical path writes do not auto-reactivate until the user manually activates again
-10. existing workflow-only gates still no-op while `.workflow.active != true`
+9. after manual deactivation, later canonical path writes do not auto-reactivate until the user issues a new explicit workflow-intent prompt
+10. existing skip-style prompt activation still works and explicitly re-activates workflow
+11. existing workflow-only gates still no-op while `.workflow.active != true`
 
 ## Testing Requirements
 
@@ -285,8 +318,9 @@ At minimum, implementation must add or update tests for:
 3. excluded prefixes such as `.simulation/.../docs/superpowers/specs/...`
 4. manual activation phrase
 5. manual deactivation phrase
-6. manual-off override preventing later auto-reactivation
-7. old state normalization for new workflow override/deactivation fields
+6. manual-off override preventing later auto-reactivation from canonical path writes
+7. skip-style prompt activation clearing manual-off override
+8. old state normalization for new workflow override/deactivation fields
 
 ## Why This Is The Recommended Shape
 
