@@ -101,20 +101,19 @@ else:
 PY
 }
 
-workflow_paths__to_physical_file_path_if_possible() {
+workflow_paths__normalize_absolute_path() {
   local path="$1"
   if [[ "$path" != /* ]]; then
     return
   fi
 
-  local path_dir
-  local path_name
-  path_dir="$(dirname "$path")"
-  path_name="${path##*/}"
+  python3 - "$path" <<'PY'
+import os
+import sys
 
-  if [ -d "$path_dir" ]; then
-    printf '%s/%s\n' "$(cd "$path_dir" 2>/dev/null && pwd -P)" "$path_name"
-  fi
+path = sys.argv[1]
+print(os.path.realpath(os.path.normpath(path)))
+PY
 }
 
 workflow_paths_normalize_project_relative_path() {
@@ -123,6 +122,7 @@ workflow_paths_normalize_project_relative_path() {
   local hook_cwd="${3:-}"
   local candidate=""
   local candidate_physical=""
+  local hook_cwd_physical=""
   local rel_path=""
   local root_alias=""
 
@@ -133,7 +133,7 @@ workflow_paths_normalize_project_relative_path() {
   candidate="$(workflow_paths__strip_leading_dot_slash "$candidate_path")"
 
   if [[ "$candidate" = /* ]]; then
-    candidate_physical="$(workflow_paths__to_physical_file_path_if_possible "$candidate" || true)"
+    candidate_physical="$(workflow_paths__normalize_absolute_path "$candidate" || true)"
     if [ -n "$candidate_physical" ] && [[ "$candidate_physical" == "$project_root"/* ]]; then
       rel_path="${candidate_physical#"$project_root"/}"
     elif [[ "$candidate" == "$project_root"/* ]]; then
@@ -150,7 +150,19 @@ workflow_paths_normalize_project_relative_path() {
       done
     fi
   else
-    rel_path="$candidate"
+    if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then
+      hook_cwd_physical="$(cd "$hook_cwd" 2>/dev/null && pwd -P)" || hook_cwd_physical=""
+      if [ -n "$hook_cwd_physical" ]; then
+        candidate_physical="$(workflow_paths__normalize_absolute_path "$hook_cwd_physical/$candidate" || true)"
+        if [ -n "$candidate_physical" ] && [[ "$candidate_physical" == "$project_root"/* ]]; then
+          rel_path="${candidate_physical#"$project_root"/}"
+        fi
+      fi
+    fi
+
+    if [ -z "$rel_path" ]; then
+      rel_path="$candidate"
+    fi
   fi
 
   if [ -z "$rel_path" ]; then
@@ -173,9 +185,19 @@ workflow_paths_is_excluded_prefix() {
   local rel_path="$1"
 
   case "$rel_path" in
-    .git/*|.worktrees/*|node_modules/*|vendor/*|.simulation/*|\
-    testdata/*|tests/testdata/*|fixture/*|fixtures/*|\
-    __fixtures__/*|tests/fixture/*|tests/fixtures/*|tests/__fixtures__/*)
+    .git/*|*/.git/*|\
+    .worktrees/*|*/.worktrees/*|\
+    node_modules/*|*/node_modules/*|\
+    vendor/*|*/vendor/*|\
+    .simulation/*|*/.simulation/*|\
+    testdata/*|*/testdata/*|\
+    fixture/*|*/fixture/*|\
+    fixtures/*|*/fixtures/*|\
+    __fixtures__/*|*/__fixtures__/*|\
+    tests/testdata/*|*/tests/testdata/*|\
+    tests/fixture/*|*/tests/fixture/*|\
+    tests/fixtures/*|*/tests/fixtures/*|\
+    tests/__fixtures__/*|*/tests/__fixtures__/*)
       return 0
       ;;
   esac

@@ -115,6 +115,7 @@ unset CLAUDE_PROJECT_DIR
 mkdir -p "$TMP_DIR/cwd-project/.claude"
 mkdir -p "$TMP_DIR/cwd-project/nested/child"
 mkdir -p "$TMP_DIR/cwd-project/current-project/docs/superpowers/specs"
+mkdir -p "$TMP_DIR/cwd-project/current-project/nested"
 write_v2_state "$TMP_DIR/cwd-project/.claude/flow_state.json"
 printf '%s' '{"cwd":"'$TMP_DIR'/cwd-project/nested/child","tool_name":"Write","tool_input":{"file_path":"'$TMP_DIR'/cwd-project/docs/superpowers/specs/2026-04-11-cwd-demo.md"}}' \
   | bash scripts/sync-post-tool-state.sh >/dev/null
@@ -134,6 +135,17 @@ assert_json_equals "$TMP_DIR/cwd-project/.claude/flow_state.json" '.workflow.act
 assert_json_equals "$TMP_DIR/cwd-project/.claude/flow_state.json" '.workflow.activated_by' '"spec_write"'
 if [ "$(jq -c '.workflow.activated_at' "$TMP_DIR/cwd-project/.claude/flow_state.json")" = "null" ]; then
   echo "Expected cwd-derived absolute subtree spec write to set .workflow.activated_at" >&2
+  exit 1
+fi
+
+write_v2_state "$TMP_DIR/cwd-project/.claude/flow_state.json"
+printf '%s' '{"cwd":"'$TMP_DIR'/cwd-project/current-project/nested","tool_name":"Write","tool_input":{"file_path":"../docs/superpowers/specs/2026-04-11-cwd-relative-demo.md"}}' \
+  | bash scripts/sync-post-tool-state.sh >/dev/null
+assert_json_equals "$TMP_DIR/cwd-project/.claude/flow_state.json" '.current_phase' '"brainstorming"'
+assert_json_equals "$TMP_DIR/cwd-project/.claude/flow_state.json" '.workflow.active' 'true'
+assert_json_equals "$TMP_DIR/cwd-project/.claude/flow_state.json" '.workflow.activated_by' '"spec_write"'
+if [ "$(jq -c '.workflow.activated_at' "$TMP_DIR/cwd-project/.claude/flow_state.json")" = "null" ]; then
+  echo "Expected cwd-relative subtree spec write to set .workflow.activated_at" >&2
   exit 1
 fi
 export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
@@ -221,6 +233,22 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.acti
 
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"testdata/docs/superpowers/specs/2026-04-11-demo.md"}}' \
+  | bash scripts/sync-post-tool-state.sh >/dev/null
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"current-project/testdata/docs/superpowers/specs/2026-04-11-demo.md"}}' \
+  | bash scripts/sync-post-tool-state.sh >/dev/null
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"current-project/something/.simulation/docs/superpowers/specs/2026-04-11-demo.md"}}' \
   | bash scripts/sync-post-tool-state.sh >/dev/null
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'
