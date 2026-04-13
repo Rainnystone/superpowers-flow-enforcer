@@ -198,6 +198,92 @@ if [ "$(jq -c '.workflow.activated_at' "$SELF_HEAL_PROJECT/.claude/flow_state.js
   exit 1
 fi
 
+MANUAL_PROMPT_PROJECT="$TMP_DIR/manual-prompt-project"
+mkdir -p "$MANUAL_PROMPT_PROJECT/.claude"
+STATE_FILE="$MANUAL_PROMPT_PROJECT/.claude/flow_state.json"
+write_v2_state "$STATE_FILE"
+
+MANUAL_ACTIVATE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"  请先   激活   superpowers    enforcer  然后继续  "}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$MANUAL_ACTIVATE_OUTPUT" ]; then
+  echo "Expected manual activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+
+MANUAL_DEACTIVATE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"先   关闭   superpowers   enforcer  再说"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$MANUAL_DEACTIVATE_OUTPUT" ]; then
+  echo "Expected manual deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+
+SKIP_AFTER_MANUAL_OFF_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip planning"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+assert_json_equals <(printf '%s' "$SKIP_AFTER_MANUAL_OFF_OUTPUT") '.decision' '"block"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"user_prompt_skip"'
+
+write_v2_state "$STATE_FILE"
+printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"关闭 superpowers enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+  | bash scripts/sync-user-prompt-state.sh >/dev/null
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+
+MANUAL_ACTIVATE_AFTER_MANUAL_OFF_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"请  激活   superpowers enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$MANUAL_ACTIVATE_AFTER_MANUAL_OFF_OUTPUT" ]; then
+  echo "Expected manual activate after manual off to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+
+write_v2_state "$STATE_FILE"
+STATE_SNAPSHOT_BEFORE_MALFORMED_PROMPT="$(jq -c . "$STATE_FILE")"
+
+MISSING_PROMPT_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$MISSING_PROMPT_OUTPUT" ]; then
+  echo "Expected missing prompt to be silent allow" >&2
+  exit 1
+fi
+STATE_SNAPSHOT_AFTER_MISSING_PROMPT="$(jq -c . "$STATE_FILE")"
+if [ "$STATE_SNAPSHOT_AFTER_MISSING_PROMPT" != "$STATE_SNAPSHOT_BEFORE_MALFORMED_PROMPT" ]; then
+  echo "Expected missing prompt to keep state unchanged" >&2
+  exit 1
+fi
+
+NON_STRING_PROMPT_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":{"raw":"激活 superpowers enforcer"}}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NON_STRING_PROMPT_OUTPUT" ]; then
+  echo "Expected non-string prompt to be silent allow" >&2
+  exit 1
+fi
+STATE_SNAPSHOT_AFTER_NON_STRING_PROMPT="$(jq -c . "$STATE_FILE")"
+if [ "$STATE_SNAPSHOT_AFTER_NON_STRING_PROMPT" != "$STATE_SNAPSHOT_BEFORE_MALFORMED_PROMPT" ]; then
+  echo "Expected non-string prompt to keep state unchanged" >&2
+  exit 1
+fi
+
 BROKEN_PROJECT="$TMP_DIR/project-broken-state"
 mkdir -p "$BROKEN_PROJECT/.claude"
 printf '{"state_version":2,' > "$BROKEN_PROJECT/.claude/flow_state.json"

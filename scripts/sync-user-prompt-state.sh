@@ -103,7 +103,16 @@ if ! state_is_readable; then
 fi
 
 USER_PROMPT="$(printf '%s' "$INPUT" | jq -r '.prompt // ""' 2>/dev/null || true)"
-PROMPT_LC="$(printf '%s' "$USER_PROMPT" | tr '[:upper:]' '[:lower:]')"
+if [ "$(printf '%s' "$INPUT" | jq -r '(.prompt | type) == "string"' 2>/dev/null || echo "false")" != "true" ]; then
+  USER_PROMPT=""
+fi
+
+normalize_prompt_text() {
+  printf '%s' "$1" | tr -s '[:space:]' ' ' | sed -e 's/^ //' -e 's/ $//'
+}
+
+PROMPT_NORMALIZED="$(normalize_prompt_text "$USER_PROMPT")"
+PROMPT_LC="$(printf '%s' "$PROMPT_NORMALIZED" | tr '[:upper:]' '[:lower:]')"
 NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
 
@@ -169,6 +178,34 @@ elif echo "$PROMPT_LC" | grep -qE 'skip[[:space:]]+finishing|跳过[[:space:]]*f
   phase="finishing"
 fi
 
+if echo "$PROMPT_LC" | grep -q '关闭 superpowers enforcer'; then
+  jq --arg now "$NOW_UTC" '
+    .workflow.active = false
+    | .workflow.override = "manual_off"
+    | .workflow.deactivated_by = "manual_prompt"
+    | .workflow.deactivated_at = $now
+  ' "$STATE_FILE" > "$tmp_file"
+  mv "$tmp_file" "$STATE_FILE"
+
+  record_interrupt_if_requested
+
+  exit 0
+fi
+
+if echo "$PROMPT_LC" | grep -q '激活 superpowers enforcer'; then
+  jq --arg now "$NOW_UTC" '
+    .workflow.active = true
+    | .workflow.override = "manual_on"
+    | .workflow.activated_by = "manual_prompt"
+    | .workflow.activated_at = $now
+  ' "$STATE_FILE" > "$tmp_file"
+  mv "$tmp_file" "$STATE_FILE"
+
+  record_interrupt_if_requested
+
+  exit 0
+fi
+
 if [ -n "$phase" ]; then
   jq --arg phase "$phase" --arg reason "$USER_PROMPT" --arg now "$NOW_UTC" '
     .exceptions.skip_brainstorming = false
@@ -181,6 +218,7 @@ if [ -n "$phase" ]; then
     | .exceptions.reason = $reason
     | .exceptions.user_confirmed = false
     | .exceptions.confirmed_at = null
+    | .workflow.override = null
     | .workflow.active = true
     | .workflow.activated_by = "user_prompt_skip"
     | .workflow.activated_at = $now
