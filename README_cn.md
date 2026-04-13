@@ -15,7 +15,7 @@
 - 完成声明前必须有新鲜验证证据
 - 测试失败时使用系统化调试方法论
 
-这里的“进入 workflow”是显式动作，不是对所有 Claude Code 会话一刀切推断。当前实现里，进入动作包括：记录 skip 请求，或写入 `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` 这类 canonical superpowers 工件。这些工件路径支持仓库相对路径、`./...` 形式，以及项目根目录下的绝对路径。
+这里的“进入 workflow”是显式动作，不是对所有 Claude Code 会话一刀切推断。当前实现里，进入动作包括：记录 skip 请求、用户明确输入 `激活 superpowers enforcer`，或者在当前项目作用域内写入 canonical superpowers 工件 `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`。自动路径激活既保留仓库根目录下的 canonical 路径，也支持像 `packages/foo/docs/superpowers/specs/*.md` 这种子树 canonical 路径，同时会排除 `.git`、`.worktrees`、`node_modules`、`vendor`、`.simulation` 以及 fixture/testdata 目录。
 
 `PreToolUse/Bash` 只有在 `workflow.active == true` 时才会运行真正的 gate；如果 workflow 没有激活，它会静默 no-op。激活后，Bash gate 通过 Node 执行 vendored 的 Bash parser runtime，因此需要 Node 18+。
 
@@ -56,6 +56,11 @@
 - 这个插件在会话真正进入 superpowers workflow 后，负责强制阶段衔接和 no-skip 规则。
 
 插件不会对每个 Claude Code 会话强行激活 workflow。如果 workflow 从未激活，workflow-only 门禁会保持 inactive，不会阻断普通 Claude Code 工作。
+
+如果你不想依赖自动路径激活，也可以手动控制：
+
+- `激活 superpowers enforcer`
+- `关闭 superpowers enforcer`
 
 ## Hook 系统
 
@@ -164,7 +169,7 @@ vendor/
 
 追踪内容:
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
-- `workflow.*`: `active`、`activated_by`、`activated_at`
+- `workflow.*`: `active`、`override`、`activated_by`、`activated_at`、`deactivated_by`、`deactivated_at`
 - `brainstorming.*`: `question_asked`、`findings_updated_after_question`、`spec_written`、`spec_reviewed`、`user_approved_spec`
 - `planning.*`: `plan_written`、`plan_file`、`execution_mode`
 - `worktree.*`: `created`、`path`、`baseline_verified`
@@ -194,7 +199,7 @@ vendor/
 
 **意外被阻断**: 检查状态文件的当前阶段状态。可能需要先完成前一阶段。
 
-**为什么 workflow 门禁没生效**: 先确认当前会话是否真的进入了 superpowers workflow，比如是否记录了 skip 请求，或者是否写入了 `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`。
+**为什么 workflow 门禁没生效**: 先确认当前会话是否真的进入了 superpowers workflow，比如是否记录了 skip 请求、是否明确输入了 `激活 superpowers enforcer`，或者是否写入了当前项目作用域内的 canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`。
 
 **Bash gate 提示需要 Node**: 安装 Node 18+，或者确保 `node` 在 `PATH` 里。激活中的 Bash gate 会通过 Node 运行 vendored 的 parser runtime。
 

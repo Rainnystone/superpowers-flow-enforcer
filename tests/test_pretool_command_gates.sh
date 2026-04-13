@@ -46,6 +46,17 @@ run_write_gate() {
   }' | bash scripts/check-pretool-gates.sh
 }
 
+run_write_gate_with_cwd() {
+  local cwd="$1"
+  local file_path="$2"
+  jq -n --arg cwd "$cwd" --arg path "$file_path" '{
+    hook_event_name:"PreToolUse",
+    cwd:$cwd,
+    tool_name:"Write",
+    tool_input:{file_path:$path}
+  }' | bash scripts/check-pretool-gates.sh
+}
+
 run_edit_gate_with_path() {
   local path="$1"
   jq -n --arg path "$path" '{
@@ -233,6 +244,35 @@ if [ -e "$ROOT_STATE_PROJECT/nested/child/.claude/flow_state.json" ]; then
   echo "Expected nested child to reuse root flow_state.json instead of bootstrapping a new one" >&2
   exit 1
 fi
+
+NESTED_PROJECT="$TMP_DIR/nested-project"
+mkdir -p "$NESTED_PROJECT/.claude" "$NESTED_PROJECT/nested/child"
+write_v2_state "$NESTED_PROJECT/.claude/flow_state.json"
+jq '
+  .workflow.active = true
+  | .brainstorming.spec_written = true
+  | .worktree.created = true
+  | .worktree.baseline_verified = true
+  | .tdd.pending_failure_record = false
+  | .tdd.tests_verified_fail = ["src/candidate.test.ts"]
+' "$NESTED_PROJECT/.claude/flow_state.json" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$NESTED_PROJECT/.claude/flow_state.json"
+
+deny_output="$(
+  (
+    export CLAUDE_PROJECT_DIR="$NESTED_PROJECT"
+    run_write_gate_with_cwd "$NESTED_PROJECT/nested/child" '../../docs/superpowers/plans/plan.md'
+  )
+)"
+assert_pretool_deny "$deny_output" 'spec review'
+
+allow_output="$(
+  (
+    export CLAUDE_PROJECT_DIR="$NESTED_PROJECT"
+    run_write_gate_with_cwd "$NESTED_PROJECT/nested/child" '../../../outside/docs/superpowers/plans/plan.md'
+  )
+)"
+assert_pretool_allow "$allow_output"
 
 write_v2_state "$STATE_FILE"
 jq '

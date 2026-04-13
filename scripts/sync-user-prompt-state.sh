@@ -111,6 +111,124 @@ normalize_prompt_text() {
   printf '%s' "$1" | tr -s '[:space:]' ' ' | sed -e 's/^ //' -e 's/ $//'
 }
 
+split_manual_control_clauses() {
+  local text="$1"
+  text="${text//，/$'\n'}"
+  text="${text//,/$'\n'}"
+  text="${text//。/$'\n'}"
+  text="${text//！/$'\n'}"
+  text="${text//!/$'\n'}"
+  text="${text//？/$'\n'}"
+  text="${text//\?/$'\n'}"
+  text="${text//；/$'\n'}"
+  text="${text//;/$'\n'}"
+  text="${text//：/$'\n'}"
+  text="${text//:/$'\n'}"
+  printf '%s\n' "$text"
+}
+
+is_manual_control_clause_start() {
+  case "$1" in
+    ""|请|请先|先|然后|再|接着|随后|请再|麻烦|麻烦请|请帮我|请直接)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+is_manual_control_clause_continuation() {
+  case "$1" in
+    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+is_manual_control_clause_explanatory() {
+  case "$1" in
+    *不要*|*别*|*不是*|*如果*|*假如*|*说明*|*解释*|*含义*|*意思*|*例子*|*举例*|*比如*|*例如*|*会做什么*|*什么意思*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+matches_manual_control_phrase() {
+  local phrase="$1"
+  local clauses=()
+  local clause
+
+  while IFS= read -r clause; do
+    clause="$(normalize_prompt_text "$clause")"
+    if [ -n "$clause" ]; then
+      clauses+=("$clause")
+    fi
+  done < <(split_manual_control_clauses "$PROMPT_NORMALIZED")
+
+  local clause_index
+  for clause_index in "${!clauses[@]}"; do
+    clause="${clauses[$clause_index]}"
+    case "$clause" in
+      *"$phrase"*) ;;
+      *)
+        continue
+        ;;
+    esac
+
+    local prefix
+    local suffix
+    prefix="$(normalize_prompt_text "${clause%%"$phrase"*}")"
+    suffix="$(normalize_prompt_text "${clause#*"$phrase"}")"
+
+    if is_manual_control_clause_explanatory "$prefix" || is_manual_control_clause_explanatory "$suffix"; then
+      continue
+    fi
+
+    if [ -n "$prefix" ]; then
+      if ! is_manual_control_clause_start "$prefix"; then
+        continue
+      fi
+    elif [ "$clause_index" -gt 0 ]; then
+      local prev_clause
+      prev_clause="${clauses[$((clause_index - 1))]}"
+      prev_clause="$(normalize_prompt_text "$prev_clause")"
+
+      if is_manual_control_clause_explanatory "$prev_clause"; then
+        continue
+      fi
+
+      if ! is_manual_control_clause_start "$prev_clause" && ! is_manual_control_clause_continuation "$prev_clause"; then
+        continue
+      fi
+    fi
+
+    if [ -n "$suffix" ]; then
+      if is_manual_control_clause_continuation "$suffix"; then
+        return 0
+      fi
+      continue
+    fi
+
+    if [ "$clause_index" -lt $((${#clauses[@]} - 1)) ]; then
+      local next_clause
+      next_clause="${clauses[$((clause_index + 1))]}"
+      next_clause="$(normalize_prompt_text "$next_clause")"
+      if is_manual_control_clause_continuation "$next_clause"; then
+        return 0
+      fi
+      continue
+    fi
+
+    return 0
+  done
+
+  return 1
+}
+
 PROMPT_NORMALIZED="$(normalize_prompt_text "$USER_PROMPT")"
 PROMPT_LC="$(printf '%s' "$PROMPT_NORMALIZED" | tr '[:upper:]' '[:lower:]')"
 NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -147,11 +265,11 @@ emit_skip_block_json() {
 }
 
 is_manual_deactivate_prompt() {
-  [[ "$PROMPT_LC" =~ ^((请|请先|先)[[:space:]]*)?关闭[[:space:]]+superpowers[[:space:]]+enforcer([[:space:]].*)?$ ]]
+  matches_manual_control_phrase "关闭 superpowers enforcer"
 }
 
 is_manual_activate_prompt() {
-  [[ "$PROMPT_LC" =~ ^((请|请先|先)[[:space:]]*)?激活[[:space:]]+superpowers[[:space:]]+enforcer([[:space:]].*)?$ ]]
+  matches_manual_control_phrase "激活 superpowers enforcer"
 }
 
 confirmation_phase=""

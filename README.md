@@ -15,7 +15,7 @@ The plugin implements workflow-aware hooks that enforce:
 - Fresh verification evidence before completion claims
 - Systematic debugging methodology on test failures
 
-Workflow entry is explicit, not inferred from every Claude Code session. In the current implementation, entry happens when the session records a skip request or writes canonical superpowers artifacts under `docs/superpowers/specs/*.md` or `docs/superpowers/plans/*.md`. Those artifact paths are recognized in repo-relative, `./...`, and project-root absolute forms.
+Workflow entry is explicit, not inferred from every Claude Code session. In the current implementation, entry happens when the session records a skip request, when the user explicitly says `激活 superpowers enforcer`, or when Claude writes canonical superpowers artifacts under `docs/superpowers/specs/*.md` or `docs/superpowers/plans/*.md` within the current project scope. That automatic path-based entry keeps the root-level canonical paths and also recognizes subtree forms such as `packages/foo/docs/superpowers/specs/*.md`, while excluding trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata directories.
 
 `PreToolUse/Bash` only runs its active gate when `workflow.active == true`. If the workflow is not active, the hook exits silently and does nothing. When active, the gate depends on Node 18+ because it executes the vendored Bash parser runtime through Node.
 
@@ -56,6 +56,11 @@ Use the three pieces together during brainstorming, spec, planning, execution, r
 - This plugin enforces the handoff and no-skip rules once the session has actually entered the superpowers workflow.
 
 The plugin does not force workflow entry on every Claude Code session. If the workflow never becomes active, workflow-only gates remain inactive and ordinary Claude Code work is not blocked by those phase checks.
+
+Manual control is also available when you do not want to rely on path-based auto-entry:
+
+- `激活 superpowers enforcer`
+- `关闭 superpowers enforcer`
 
 ## Hook System
 
@@ -163,7 +168,7 @@ State file: `$CLAUDE_PROJECT_DIR/.claude/flow_state.json`
 
 Tracks:
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
-- `workflow.*`: `active`, `activated_by`, `activated_at`
+- `workflow.*`: `active`, `override`, `activated_by`, `activated_at`, `deactivated_by`, `deactivated_at`
 - `brainstorming.*`: `question_asked`, `findings_updated_after_question`, `spec_written`, `spec_reviewed`, `user_approved_spec`
 - `planning.*`: `plan_written`, `plan_file`, `execution_mode`
 - `worktree.*`: `created`, `path`, `baseline_verified`
@@ -193,7 +198,7 @@ The plugin references these superpowers skills:
 
 **Blocked unexpectedly**: Check state file for current phase status. May need to complete earlier phase.
 
-**Workflow gate not applying**: Confirm the session has actually entered the superpowers workflow, for example through a skip request or by writing `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`.
+**Workflow gate not applying**: Confirm the session has actually entered the superpowers workflow, for example through a skip request, by saying `激活 superpowers enforcer`, or by writing a canonical workflow artifact under either `docs/superpowers/specs|plans/*.md` at the root or the same canonical path inside the current project subtree.
 
 **Bash gate says Node is required**: Install Node 18+ or make `node` available on `PATH`. The active Bash gate runs the vendored parser runtime through Node.
 

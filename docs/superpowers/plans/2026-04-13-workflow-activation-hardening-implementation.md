@@ -179,8 +179,8 @@ git commit -m "fix: extend workflow activation state schema"
 
 Extend `tests/test_bypass_state.sh` with `UserPromptSubmit` cases for:
 
-1. normalized substring match for `激活 superpowers enforcer`
-2. normalized substring match for `关闭 superpowers enforcer`
+1. normalized command-like clause match for `激活 superpowers enforcer`
+2. normalized command-like clause match for `关闭 superpowers enforcer`
 3. manual activation setting:
 
 ```bash
@@ -216,8 +216,8 @@ Expected: FAIL because the current script only handles skip-style prompts and in
 Update `scripts/sync-user-prompt-state.sh` to:
 
 1. normalize prompt text by trimming and collapsing repeated whitespace
-2. detect `激活 superpowers enforcer` as a normalized substring
-3. detect `关闭 superpowers enforcer` as a normalized substring
+2. detect `激活 superpowers enforcer` as a normalized command-like clause
+3. detect `关闭 superpowers enforcer` as a normalized command-like clause
 4. on manual activate:
    - set `.workflow.active = true`
    - set `.workflow.override = "manual_on"`

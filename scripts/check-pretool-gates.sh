@@ -77,47 +77,50 @@ deny_pretool() {
   }'
 }
 
-normalize_path() {
+normalize_recorded_path() {
   local path="$1"
-  local path_physical=""
-  local path_dir=""
-  local path_name=""
-  local root=""
-  local -a candidate_roots=()
 
   while [[ "$path" == ./* ]]; do
     path="${path#./}"
   done
 
   if [[ "$path" = /* ]]; then
-    path_dir="$(dirname "$path")"
-    path_name="${path##*/}"
-    if [ -d "$path_dir" ]; then
-      path_physical="$(cd "$path_dir" 2>/dev/null && pwd -P)/$path_name"
-    fi
-  fi
-
-  candidate_roots+=("$PROJECT_DIR")
-  if [ -n "${PROJECT_DIR_LOGICAL_ROOT:-}" ] && [ "$PROJECT_DIR_LOGICAL_ROOT" != "$PROJECT_DIR" ]; then
-    candidate_roots+=("$PROJECT_DIR_LOGICAL_ROOT")
-  fi
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-    candidate_roots+=("$CLAUDE_PROJECT_DIR")
-  fi
-
-  for root in "${candidate_roots[@]}"; do
-    if [ -n "$root" ] && [[ "$path" == "$root"/* ]]; then
-      printf '%s\n' "${path#"$root"/}"
+    local absolute
+    absolute="$(workflow_paths__normalize_absolute_path "$path" || true)"
+    if [ -n "$absolute" ]; then
+      printf '%s\n' "$absolute"
       return
     fi
+  fi
+
+  printf '%s\n' "$(workflow_paths__normalize_relative_path "$path")"
+}
+
+normalize_hook_path() {
+  local path="$1"
+  local hook_cwd="${2:-}"
+  local project_relative=""
+  local absolute=""
+
+  while [[ "$path" == ./* ]]; do
+    path="${path#./}"
   done
 
-  if [ -n "$path_physical" ] && [ -n "$PROJECT_DIR" ] && [[ "$path_physical" == "$PROJECT_DIR"/* ]]; then
-    printf '%s\n' "${path_physical#"$PROJECT_DIR"/}"
+  project_relative="$(workflow_paths_normalize_project_relative_path "$path" "$PROJECT_DIR" "$hook_cwd")"
+  if [ -n "$project_relative" ]; then
+    printf '%s\n' "$project_relative"
     return
   fi
 
-  printf '%s\n' "$path"
+  if [[ "$path" = /* ]]; then
+    absolute="$(workflow_paths__normalize_absolute_path "$path" || true)"
+    if [ -n "$absolute" ]; then
+      printf '%s\n' "$absolute"
+      return
+    fi
+  fi
+
+  printf '%s\n' "$(workflow_paths__normalize_relative_path "$path")"
 }
 
 state_is_true() {
@@ -127,7 +130,16 @@ state_is_true() {
 
 canonical_workflow_artifact_type() {
   local path="$1"
-  workflow_paths_classify_canonical_write "$path"
+  local hook_cwd="${2:-}"
+  local project_relative=""
+
+  project_relative="$(workflow_paths_normalize_project_relative_path "$path" "$PROJECT_DIR" "$hook_cwd")"
+  if [ -z "$project_relative" ]; then
+    printf 'none\n'
+    return
+  fi
+
+  workflow_paths_classify_canonical_write "$project_relative"
 }
 
 is_spec_or_plan_entry_path() {
@@ -188,7 +200,7 @@ has_verified_failing_candidate() {
   mapfile -t failed_tests < <(jq -r '.tdd.tests_verified_fail[]? | select(type == "string")' "$STATE_FILE")
 
   for failed in "${failed_tests[@]}"; do
-    normalized_failed="$(normalize_path "$failed")"
+    normalized_failed="$(normalize_recorded_path "$failed")"
     for candidate in "${candidates[@]}"; do
       if [ "$normalized_failed" = "$candidate" ]; then
         return 0
@@ -259,7 +271,9 @@ if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-NORMALIZED_PATH="$(normalize_path "$FILE_PATH")"
+HOOK_CWD="$(hook_cwd_from_input)"
+NORMALIZED_PATH="$(normalize_hook_path "$FILE_PATH" "$HOOK_CWD")"
+CANONICAL_WORKFLOW_KIND="$(canonical_workflow_artifact_type "$FILE_PATH" "$HOOK_CWD")"
 
 if [ "$NORMALIZED_PATH" = ".claude/flow_state.json" ]; then
   deny_pretool "禁止直接手改 flow_state.json，请通过 hooks 自动推进状态。"
@@ -267,13 +281,13 @@ if [ "$NORMALIZED_PATH" = ".claude/flow_state.json" ]; then
 fi
 
 if ! state_is_true '.workflow.active'; then
-  if is_spec_or_plan_entry_path "$NORMALIZED_PATH"; then
+  if [ "$CANONICAL_WORKFLOW_KIND" != "none" ]; then
     exit 0
   fi
   exit 0
 fi
 
-if is_plan_path "$NORMALIZED_PATH"; then
+if [ "$CANONICAL_WORKFLOW_KIND" = "plan" ]; then
   if ! (state_is_true '.exceptions.skip_planning' && state_is_true '.exceptions.user_confirmed'); then
     if ! state_is_true '.brainstorming.spec_reviewed' || ! state_is_true '.brainstorming.user_approved_spec'; then
       deny_pretool "写入计划前必须先完成 spec review 并获得用户批准；only skip_planning may bypass this gate."

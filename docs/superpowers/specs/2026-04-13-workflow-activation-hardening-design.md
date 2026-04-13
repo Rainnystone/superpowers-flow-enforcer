@@ -105,8 +105,9 @@ Matching should use normalized prompt text:
 
 1. trim leading and trailing whitespace
 2. collapse internal repeated whitespace
-3. match the exact control phrase as a normalized substring, so prompts such as `请先激活 superpowers enforcer` still count
-4. do not treat vague paraphrases as equivalent in this round
+3. match the exact control phrase as a normalized command-like clause or clause fragment, so prompts such as `请先激活 superpowers enforcer` and `先整理上下文，然后激活 superpowers enforcer 再继续` still count
+4. explanation, negation, examples, or hypothetical discussion of the phrase must not count as control input
+5. do not treat vague paraphrases as equivalent in this round
 
 ### 4. Inactive workflow remains the no-op boundary
 
@@ -129,7 +130,7 @@ The plugin should support three activation signals:
 
 ### Manual activation
 
-When `UserPromptSubmit` contains `激活 superpowers enforcer`, the plugin should:
+When `UserPromptSubmit` contains a command-like `激活 superpowers enforcer` clause, the plugin should:
 
 1. set workflow to active immediately
 2. record that activation came from an explicit user prompt
@@ -137,7 +138,7 @@ When `UserPromptSubmit` contains `激活 superpowers enforcer`, the plugin shoul
 
 ### Manual deactivation
 
-When `UserPromptSubmit` contains `关闭 superpowers enforcer`, the plugin should:
+When `UserPromptSubmit` contains a command-like `关闭 superpowers enforcer` clause, the plugin should:
 
 1. set workflow to inactive immediately
 2. record that deactivation came from an explicit user prompt

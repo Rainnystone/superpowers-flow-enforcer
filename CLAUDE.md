@@ -6,8 +6,9 @@
 
 The plugin uses Claude Code hooks to enforce workflow only after explicit workflow entry:
 
-- **Workflow Entry**: The current implementation treats skip requests and canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` writes as explicit entry signals. Those paths are recognized in repo-relative, `./...`, and project-root absolute forms.
+- **Workflow Entry**: The current implementation treats skip requests, the explicit prompt `激活 superpowers enforcer`, and canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` writes within the current project scope as entry signals. Root-level canonical paths remain valid, subtree canonical paths such as `packages/foo/docs/superpowers/specs/*.md` also activate, and excluded trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata do not.
 - **Pre-Activation Behavior**: If the session never enters the workflow, workflow-only gates stay inactive and ordinary Claude Code work is not blocked by those phase checks.
+- **Manual Control**: `激活 superpowers enforcer` turns workflow enforcement on explicitly. `关闭 superpowers enforcer` turns it off explicitly and prevents passive path-based reactivation until a new explicit workflow-intent signal appears.
 - **Bash Runtime**: `PreToolUse/Bash` is command-only, silent while `workflow.active != true`, and uses the vendored `vendor/bash-traverse` runtime through Node 18+ once the workflow is active.
 - **Brainstorming / Planning**: After activation, SPEC writing still requires self-review and user approval before planning can proceed.
 - **TDD Phase**: Production code is blocked without a verified failing test.
@@ -35,7 +36,7 @@ Pause handling is text keyword based: keywords in user text set `interrupt.allow
 
 The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` tracking:
 - Current workflow phase
-- Workflow activation status (`workflow.active`, `workflow.activated_by`, `workflow.activated_at`)
+- Workflow activation status (`workflow.active`, `workflow.override`, `workflow.activated_by`, `workflow.activated_at`, `workflow.deactivated_by`, `workflow.deactivated_at`)
 - Phase completion status
 - Bypass exceptions and confirmations
 - Interrupt status
