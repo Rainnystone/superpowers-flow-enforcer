@@ -19,6 +19,9 @@ assert_fresh_v2_state() {
   assert_json_equals "$file" '.workflow.active' 'false'
   assert_json_equals "$file" '.workflow.activated_by' 'null'
   assert_json_equals "$file" '.workflow.activated_at' 'null'
+  assert_json_equals "$file" '.workflow.override' 'null'
+  assert_json_equals "$file" '.workflow.deactivated_by' 'null'
+  assert_json_equals "$file" '.workflow.deactivated_at' 'null'
 }
 
 assert_backup_matches_original() {
@@ -41,6 +44,9 @@ printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
 
 assert_file_exists "$SESSION_CWD/.claude/flow_state.json"
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.override' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_at' 'null'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.project_dir' "\"$SESSION_CWD\""
 
 write_v2_state_without_workflow "$SESSION_CWD/.claude/flow_state.json"
@@ -51,8 +57,12 @@ printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.override' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_at' 'null'
 
-write_v2_state_with_partial_workflow "$SESSION_CWD/.claude/flow_state.json"
+write_v2_state_with_partial_workflow_override "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
 
 printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
   | bash scripts/init-state.sh >/dev/null
@@ -61,6 +71,27 @@ assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_at' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.override' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_at' 'null'
+if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
+  echo "Expected old v2 workflow state to normalize missing new workflow fields in place" >&2
+  exit 1
+fi
+
+write_v2_state_with_partial_workflow "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_at' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.override' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_at' 'null'
 if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
   echo "Expected partial workflow state to normalize in place without backup" >&2
   exit 1
@@ -76,6 +107,9 @@ assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'false'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_by' 'null'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.activated_at' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.override' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_by' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_at' 'null'
 if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
   echo "Expected missing-active workflow state to normalize in place without backup" >&2
   exit 1
@@ -93,6 +127,19 @@ fi
 
 assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_backup_matches_original "$TMP_DIR/unsafe-workflow.original" "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
+
+write_v2_state_with_invalid_workflow_override_types "$SESSION_CWD/.claude/flow_state.json"
+cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow-override-fields.original"
+
+if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+  echo "Expected init-state.sh to recover from unsafe v2 workflow override field types" >&2
+  cat /tmp/test-init-state.err >&2
+  exit 1
+fi
+
+assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_backup_matches_original "$TMP_DIR/unsafe-workflow-override-fields.original" "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
 
 write_v2_state_with_invalid_workflow_types "$SESSION_CWD/.claude/flow_state.json"

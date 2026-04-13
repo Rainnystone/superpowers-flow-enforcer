@@ -52,11 +52,17 @@ normalize_workflow_state() {
       .workflow.active = (.workflow.active // false)
       | .workflow.activated_by = (.workflow.activated_by // null)
       | .workflow.activated_at = (.workflow.activated_at // null)
+      | .workflow.override = (.workflow.override // null)
+      | .workflow.deactivated_by = (.workflow.deactivated_by // null)
+      | .workflow.deactivated_at = (.workflow.deactivated_at // null)
     else
       .workflow = {
         "active": false,
         "activated_by": null,
-        "activated_at": null
+        "activated_at": null,
+        "override": null,
+        "deactivated_by": null,
+        "deactivated_at": null
       }
     end
   ' "$STATE_FILE" > "${STATE_FILE}.tmp"
@@ -122,9 +128,26 @@ if [ -f "$STATE_FILE" ]; then
         (workflow_field_status("active"; ["boolean"])) as $active_status
         | (workflow_field_status("activated_by"; ["string"])) as $activated_by_status
         | (workflow_field_status("activated_at"; ["string"])) as $activated_at_status
-        | if ($active_status == "unsafe" or $activated_by_status == "unsafe" or $activated_at_status == "unsafe") then
+        | (workflow_field_status("override"; ["string"])) as $override_status
+        | (workflow_field_status("deactivated_by"; ["string"])) as $deactivated_by_status
+        | (workflow_field_status("deactivated_at"; ["string"])) as $deactivated_at_status
+        | if (
+            $active_status == "unsafe"
+            or $activated_by_status == "unsafe"
+            or $activated_at_status == "unsafe"
+            or $override_status == "unsafe"
+            or $deactivated_by_status == "unsafe"
+            or $deactivated_at_status == "unsafe"
+          ) then
             "unsafe"
-          elif ($active_status == "needs_normalization" or $activated_by_status == "needs_normalization" or $activated_at_status == "needs_normalization") then
+          elif (
+            $active_status == "needs_normalization"
+            or $activated_by_status == "needs_normalization"
+            or $activated_at_status == "needs_normalization"
+            or $override_status == "needs_normalization"
+            or $deactivated_by_status == "needs_normalization"
+            or $deactivated_at_status == "needs_normalization"
+          ) then
             "needs_normalization"
           else
             "valid"
