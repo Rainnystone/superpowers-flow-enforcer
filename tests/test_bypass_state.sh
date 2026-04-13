@@ -203,6 +203,36 @@ mkdir -p "$MANUAL_PROMPT_PROJECT/.claude"
 STATE_FILE="$MANUAL_PROMPT_PROJECT/.claude/flow_state.json"
 write_v2_state "$STATE_FILE"
 
+STATE_SNAPSHOT_BEFORE_NEGATIVE_PROMPTS="$(jq -c . "$STATE_FILE")"
+
+NEGATIVE_DEACTIVATE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"不要关闭 superpowers enforcer，我是在解释命令"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_DEACTIVATE_OUTPUT" ]; then
+  echo "Expected explanatory negative deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+STATE_SNAPSHOT_AFTER_NEGATIVE_DEACTIVATE="$(jq -c . "$STATE_FILE")"
+if [ "$STATE_SNAPSHOT_AFTER_NEGATIVE_DEACTIVATE" != "$STATE_SNAPSHOT_BEFORE_NEGATIVE_PROMPTS" ]; then
+  echo "Expected explanatory negative deactivate prompt to keep state unchanged" >&2
+  exit 1
+fi
+
+NEGATIVE_ACTIVATE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"如果用户输入 激活 superpowers enforcer，这个 hook 会做什么？"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_ACTIVATE_OUTPUT" ]; then
+  echo "Expected explanatory activate question prompt to be silent allow" >&2
+  exit 1
+fi
+STATE_SNAPSHOT_AFTER_NEGATIVE_ACTIVATE="$(jq -c . "$STATE_FILE")"
+if [ "$STATE_SNAPSHOT_AFTER_NEGATIVE_ACTIVATE" != "$STATE_SNAPSHOT_BEFORE_NEGATIVE_PROMPTS" ]; then
+  echo "Expected explanatory activate question prompt to keep state unchanged" >&2
+  exit 1
+fi
+
 MANUAL_ACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"  请先   激活   superpowers    enforcer  然后继续  "}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
@@ -235,6 +265,8 @@ assert_json_equals <(printf '%s' "$SKIP_AFTER_MANUAL_OFF_OUTPUT") '.decision' '"
 assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
 assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"user_prompt_skip"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_at' 'null'
 
 write_v2_state "$STATE_FILE"
 printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"关闭 superpowers enforcer"}' "$MANUAL_PROMPT_PROJECT" \
@@ -252,6 +284,8 @@ fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_at' 'null'
 
 write_v2_state "$STATE_FILE"
 STATE_SNAPSHOT_BEFORE_MALFORMED_PROMPT="$(jq -c . "$STATE_FILE")"

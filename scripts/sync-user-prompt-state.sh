@@ -146,6 +146,14 @@ emit_skip_block_json() {
   }'
 }
 
+is_manual_deactivate_prompt() {
+  [[ "$PROMPT_LC" =~ ^((请|请先|先)[[:space:]]*)?关闭[[:space:]]+superpowers[[:space:]]+enforcer([[:space:]].*)?$ ]]
+}
+
+is_manual_activate_prompt() {
+  [[ "$PROMPT_LC" =~ ^((请|请先|先)[[:space:]]*)?激活[[:space:]]+superpowers[[:space:]]+enforcer([[:space:]].*)?$ ]]
+}
+
 confirmation_phase=""
 if [[ "$PROMPT_LC" =~ ^confirm[[:space:]]+skip[[:space:]]+(brainstorming|planning|tdd|test|review|finishing)([[:space:]].*)?$ ]]; then
   confirmation_phase="$(normalize_confirmation_phase "${BASH_REMATCH[1]}")"
@@ -178,7 +186,7 @@ elif echo "$PROMPT_LC" | grep -qE 'skip[[:space:]]+finishing|跳过[[:space:]]*f
   phase="finishing"
 fi
 
-if echo "$PROMPT_LC" | grep -q '关闭 superpowers enforcer'; then
+if is_manual_deactivate_prompt; then
   jq --arg now "$NOW_UTC" '
     .workflow.active = false
     | .workflow.override = "manual_off"
@@ -192,12 +200,14 @@ if echo "$PROMPT_LC" | grep -q '关闭 superpowers enforcer'; then
   exit 0
 fi
 
-if echo "$PROMPT_LC" | grep -q '激活 superpowers enforcer'; then
+if is_manual_activate_prompt; then
   jq --arg now "$NOW_UTC" '
     .workflow.active = true
     | .workflow.override = "manual_on"
     | .workflow.activated_by = "manual_prompt"
     | .workflow.activated_at = $now
+    | .workflow.deactivated_by = null
+    | .workflow.deactivated_at = null
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
 
@@ -222,6 +232,8 @@ if [ -n "$phase" ]; then
     | .workflow.active = true
     | .workflow.activated_by = "user_prompt_skip"
     | .workflow.activated_at = $now
+    | .workflow.deactivated_by = null
+    | .workflow.deactivated_at = null
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
 
