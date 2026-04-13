@@ -116,6 +116,9 @@ if ('PreToolUse', 'AskUserQuestion', 'command') not in inventory:
 if ('PreToolUse', 'Bash', 'command') not in inventory:
     sys.stderr.write('Expected PreToolUse/Bash to use command hook\n')
     raise SystemExit(1)
+if ('PreToolUse', 'Agent', 'command') not in inventory:
+    sys.stderr.write('Expected PreToolUse/Agent to use command hook\n')
+    raise SystemExit(1)
 if ('PreToolUse', 'Bash', 'prompt') in inventory:
     sys.stderr.write('Expected PreToolUse/Bash to stop using prompt hook\n')
     raise SystemExit(1)
@@ -124,6 +127,9 @@ if ('PreToolUse', 'Edit|Write', 'agent') in inventory:
     raise SystemExit(1)
 if ('PreToolUse', 'AskUserQuestion', 'agent') in inventory:
     sys.stderr.write('Expected PreToolUse/AskUserQuestion to stop using agent hook\n')
+    raise SystemExit(1)
+if ('PreToolUse', 'Agent', 'agent') in inventory:
+    sys.stderr.write('Expected PreToolUse/Agent to stop using agent hook\n')
     raise SystemExit(1)
 for matcher in ('Write|Edit', 'Write', 'Bash'):
     if ('PostToolUse', matcher, 'agent') in inventory:
@@ -163,7 +169,7 @@ if bash_pretool_hook.get('command') != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/check
 if 'prompt' in bash_pretool_hook:
     sys.stderr.write('Expected PreToolUse/Bash to stop using prompt hook wiring\n')
     raise SystemExit(1)
-for matcher in ('Edit|Write', 'AskUserQuestion'):
+for matcher in ('Edit|Write', 'AskUserQuestion', 'Agent'):
     group_hooks = pretool_entries.get(matcher, [])
     if len(group_hooks) != 1:
         sys.stderr.write(f'Expected PreToolUse/{matcher} to have exactly one hook\n')

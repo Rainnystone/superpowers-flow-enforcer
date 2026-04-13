@@ -69,6 +69,23 @@ normalize_workflow_state() {
   mv "${STATE_FILE}.tmp" "$STATE_FILE"
 }
 
+normalize_task_flow_state() {
+  jq '
+    if (.task_flow | type) == "object" then
+      .task_flow.active_task_id = (.task_flow.active_task_id // null)
+      | .task_flow.active_packet_role = (.task_flow.active_packet_role // null)
+      | .task_flow.last_dispatch_at = (.task_flow.last_dispatch_at // null)
+    else
+      .task_flow = {
+        "active_task_id": null,
+        "active_packet_role": null,
+        "last_dispatch_at": null
+      }
+    end
+  ' "$STATE_FILE" > "${STATE_FILE}.tmp"
+  mv "${STATE_FILE}.tmp" "$STATE_FILE"
+}
+
 backup_and_reset_state() {
   cp "$STATE_FILE" "${STATE_FILE}.bak"
   initialize_state
@@ -102,6 +119,7 @@ if [ -f "$STATE_FILE" ]; then
   if [ "$VERSION" -lt 2 ]; then
     bash "$MIGRATE_SCRIPT" "$STATE_FILE"
     normalize_workflow_state
+    normalize_task_flow_state
     echo "{\"continue\": true, \"systemMessage\": \"Flow state migrated to v2 at $STATE_FILE\"}"
     exit 0
   fi
@@ -161,6 +179,75 @@ if [ -f "$STATE_FILE" ]; then
   if [ "$WORKFLOW_STATUS" = "missing" ] || [ "$WORKFLOW_STATUS" = "needs_normalization" ]; then
     normalize_workflow_state
   elif [ "$WORKFLOW_STATUS" = "unsafe" ]; then
+    backup_and_reset_state
+    echo "{\"continue\": true, \"systemMessage\": \"Flow state backed up and reset at $STATE_FILE\"}"
+    exit 0
+  fi
+
+  TASK_FLOW_STATUS="$(jq -r '
+    if has("task_flow") then
+      if (.task_flow | type) != "object" then
+        "unsafe"
+      else
+        def nullable_string_field_status($key):
+          if (.task_flow | has($key)) then
+            (.task_flow[$key] | type) as $field_type
+            | if ($field_type == "string" or $field_type == "null") then
+                "valid"
+              else
+                "unsafe"
+              end
+          else
+            "needs_normalization"
+          end;
+
+        def role_field_status:
+          if (.task_flow | has("active_packet_role")) then
+            (.task_flow.active_packet_role | type) as $role_type
+            | if $role_type == "null" then
+                "valid"
+              elif $role_type != "string" then
+                "unsafe"
+              elif (
+                .task_flow.active_packet_role == "implementer"
+                or .task_flow.active_packet_role == "spec-reviewer"
+                or .task_flow.active_packet_role == "code-reviewer"
+              ) then
+                "valid"
+              else
+                "unsafe"
+              end
+          else
+            "needs_normalization"
+          end;
+
+        (nullable_string_field_status("active_task_id")) as $active_task_status
+        | (role_field_status) as $active_role_status
+        | (nullable_string_field_status("last_dispatch_at")) as $last_dispatch_status
+        | if (
+            $active_task_status == "unsafe"
+            or $active_role_status == "unsafe"
+            or $last_dispatch_status == "unsafe"
+          ) then
+            "unsafe"
+          elif (
+            $active_task_status == "needs_normalization"
+            or $active_role_status == "needs_normalization"
+            or $last_dispatch_status == "needs_normalization"
+          ) then
+            "needs_normalization"
+          else
+            "valid"
+          end
+      end
+    else
+      "missing"
+    end
+  ' "$STATE_FILE")"
+
+  if [ "$TASK_FLOW_STATUS" = "missing" ] || [ "$TASK_FLOW_STATUS" = "needs_normalization" ]; then
+    normalize_task_flow_state
+  elif [ "$TASK_FLOW_STATUS" = "unsafe" ]; then
     backup_and_reset_state
     echo "{\"continue\": true, \"systemMessage\": \"Flow state backed up and reset at $STATE_FILE\"}"
     exit 0

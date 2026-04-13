@@ -14,9 +14,12 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 INIT_STATE_SCRIPT="$SCRIPT_DIR/init-state.sh"
 WORKFLOW_PATHS_LIB="$SCRIPT_DIR/lib/workflow_paths.sh"
+TASK_FLOW_PACKETS_LIB="$SCRIPT_DIR/lib/task_flow_packets.sh"
 
 # shellcheck source=/dev/null
 source "$WORKFLOW_PATHS_LIB"
+# shellcheck source=/dev/null
+source "$TASK_FLOW_PACKETS_LIB"
 
 hook_cwd_from_input() {
   printf '%s' "$INPUT" | jq -r '
@@ -126,6 +129,52 @@ normalize_hook_path() {
 state_is_true() {
   local expr="$1"
   jq -e "$expr == true" "$STATE_FILE" >/dev/null 2>&1
+}
+
+state_active_task_id() {
+  jq -r '
+    if (.task_flow.active_task_id | type) == "string" then
+      .task_flow.active_task_id
+    else
+      ""
+    end
+  ' "$STATE_FILE" 2>/dev/null || true
+}
+
+state_task_review_passed() {
+  local task_id="$1"
+  local review_key="$2"
+
+  jq -e --arg task_id "$task_id" --arg review_key "$review_key" '
+    .review.tasks[$task_id][$review_key] == true
+  ' "$STATE_FILE" >/dev/null 2>&1
+}
+
+task_boundary_agent_gate_active() {
+  local active_task_id
+  active_task_id="$(state_active_task_id)"
+  if [ -n "$active_task_id" ]; then
+    return 0
+  fi
+
+  if state_is_true '.workflow.active' \
+    && state_is_true '.worktree.created' \
+    && state_is_true '.worktree.baseline_verified'; then
+    return 0
+  fi
+
+  return 1
+}
+
+is_supported_packet_role() {
+  local packet_role="$1"
+  case "$packet_role" in
+    implementer|spec-reviewer|code-reviewer)
+      return 0
+      ;;
+  esac
+
+  return 1
 }
 
 canonical_workflow_artifact_type() {
@@ -259,6 +308,71 @@ if [ "$TOOL_NAME" = "AskUserQuestion" ]; then
     exit 0
   fi
 
+  exit 0
+fi
+
+if [ "$TOOL_NAME" = "Agent" ]; then
+  if ! task_boundary_agent_gate_active; then
+    exit 0
+  fi
+
+  packet_metadata=""
+  if ! packet_metadata="$(printf '%s' "$INPUT" | task_flow_packets_extract_packet_metadata_raw 2>/dev/null)"; then
+    deny_pretool "Agent dispatch 缺少任务包元数据。请在 prompt 开头添加 SPFE_TASK_ID 和 SPFE_PACKET_ROLE。"
+    exit 0
+  fi
+
+  packet_task_id="$(printf '%s' "$packet_metadata" | jq -r '.task_id // ""')"
+  packet_role="$(printf '%s' "$packet_metadata" | jq -r '.role // ""')"
+  active_task_id="$(state_active_task_id)"
+
+  if [ -z "$active_task_id" ]; then
+    if ! is_supported_packet_role "$packet_role"; then
+      deny_pretool "SPFE_PACKET_ROLE=$packet_role 不受支持。仅允许 implementer、spec-reviewer、code-reviewer。"
+      exit 0
+    fi
+
+    if [ "$packet_role" = "implementer" ]; then
+      exit 0
+    fi
+
+    deny_pretool "Agent review dispatch requires an active task; no active task is open. Dispatch implementer first with SPFE_PACKET_ROLE=implementer."
+    exit 0
+  fi
+
+  if ! is_supported_packet_role "$packet_role"; then
+    deny_pretool "Current open task $active_task_id only accepts reviewer roles spec-reviewer and code-reviewer. Claude must finish current review loop first for $active_task_id before dispatching SPFE_PACKET_ROLE=$packet_role."
+    exit 0
+  fi
+
+  if [ "$packet_role" = "implementer" ]; then
+    if [ "$packet_task_id" = "$active_task_id" ]; then
+      exit 0
+    fi
+
+    if state_task_review_passed "$active_task_id" "spec_review_passed" \
+      && state_task_review_passed "$active_task_id" "code_review_passed"; then
+      exit 0
+    fi
+
+    deny_pretool "Current open task $active_task_id is missing review pass(es). Claude must finish current review loop first for $active_task_id before dispatching implementer for $packet_task_id."
+    exit 0
+  fi
+
+  if [ "$packet_task_id" != "$active_task_id" ]; then
+    deny_pretool "Current open task $active_task_id is still in review. Claude must finish current review loop first for $active_task_id before dispatching $packet_role for $packet_task_id."
+    exit 0
+  fi
+
+  if [ "$packet_role" = "spec-reviewer" ]; then
+    exit 0
+  fi
+
+  if state_task_review_passed "$active_task_id" "spec_review_passed"; then
+    exit 0
+  fi
+
+  deny_pretool "Current open task $active_task_id requires spec-reviewer pass before code-reviewer. Claude must finish current review loop first for $active_task_id before dispatching code-reviewer."
   exit 0
 fi
 

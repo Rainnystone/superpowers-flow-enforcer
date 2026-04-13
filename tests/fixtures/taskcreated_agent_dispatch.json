@@ -1,0 +1,9 @@
+{
+  "hook_event_name": "TaskCreated",
+  "task_id": "task-001",
+  "task_subject": "Task 1: Pin Delegation Payload Contract",
+  "task_description": "This task note mentions SPFE_TASK_ID=task-001 and SPFE_PACKET_ROLE=implementer inside prose, but there is no Agent prompt prefix here.",
+  "teammate_name": "Claude Code",
+  "team_name": "Superpowers"
+}
+

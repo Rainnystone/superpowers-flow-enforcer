@@ -1,0 +1,10 @@
+{
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Review the packet after dispatch.",
+    "prompt": "SPFE_TASK_ID=task-001\nSPFE_PACKET_ROLE=code-reviewer\n\nReview the completed dispatch payload contract.\nLater prose may mention SPFE_TASK_ID=ignored-task and SPFE_PACKET_ROLE=ignored-role, but that is not metadata.",
+    "subagent_type": "general"
+  }
+}
+

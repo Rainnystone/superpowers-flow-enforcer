@@ -17,6 +17,50 @@ if [ "$MODE" = "--check-safe" ]; then
         and (.review | type) == "object"
         and (.finishing | type) == "object"
         and (.debugging | type) == "object"
+        and (
+          if has("task_flow") then
+            (.task_flow | type) == "object"
+            and (
+              if (.task_flow | has("active_task_id")) then
+                (
+                  (.task_flow.active_task_id | type) == "string"
+                  or (.task_flow.active_task_id | type) == "null"
+                )
+              else
+                true
+              end
+            )
+            and (
+              if (.task_flow | has("active_packet_role")) then
+                (
+                  (.task_flow.active_packet_role | type) == "null"
+                  or (
+                    (.task_flow.active_packet_role | type) == "string"
+                    and (
+                      .task_flow.active_packet_role == "implementer"
+                      or .task_flow.active_packet_role == "spec-reviewer"
+                      or .task_flow.active_packet_role == "code-reviewer"
+                    )
+                  )
+                )
+              else
+                true
+              end
+            )
+            and (
+              if (.task_flow | has("last_dispatch_at")) then
+                (
+                  (.task_flow.last_dispatch_at | type) == "string"
+                  or (.task_flow.last_dispatch_at | type) == "null"
+                )
+              else
+                true
+              end
+            )
+          else
+            true
+          end
+        )
         and (.exceptions | type) == "object"
         and (.interrupt | type) == "object"
         and (.review.tasks | type) == "object"
@@ -89,6 +133,11 @@ jq '
       "created": (.worktree.created // false),
       "path": (.worktree.path // null),
       "baseline_verified": (.worktree.baseline_verified // .worktree.baseline_tests_passed // false)
+    },
+    "task_flow": {
+      "active_task_id": null,
+      "active_packet_role": null,
+      "last_dispatch_at": null
     },
     "tdd": {
       "current_task": (.tdd.current_task // null),

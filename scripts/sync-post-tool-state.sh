@@ -35,6 +35,8 @@ HOOK_CWD="$(printf '%s' "$INPUT" | jq -r '
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/workflow_paths.sh
 source "$SCRIPT_DIR/lib/workflow_paths.sh"
+# shellcheck source=lib/task_flow_packets.sh
+source "$SCRIPT_DIR/lib/task_flow_packets.sh"
 
 PROJECT_DIR="$(workflow_paths_resolve_project_root "$HOOK_CWD")"
 if [ -z "$PROJECT_DIR" ]; then
@@ -76,6 +78,45 @@ append_unique_string_to_array() {
       else .
       end;
     setpathstr($path; $value)
+  ' "$STATE_FILE" > "$tmp_file"
+  mv "$tmp_file" "$STATE_FILE"
+}
+
+record_successful_agent_dispatch() {
+  local packet_metadata="$1"
+  local packet_task_id
+  local packet_role
+
+  packet_task_id="$(printf '%s' "$packet_metadata" | jq -r '.task_id // ""')"
+  packet_role="$(printf '%s' "$packet_metadata" | jq -r '.role // ""')"
+
+  if [ -z "$packet_task_id" ] || [ -z "$packet_role" ]; then
+    return
+  fi
+
+  jq --arg task_id "$packet_task_id" --arg role "$packet_role" --arg now "$NOW_UTC" '
+    def bool_or_false:
+      if type == "boolean" then . else false end;
+
+    .task_flow = (if (.task_flow | type) == "object" then .task_flow else {} end)
+    | .task_flow.active_packet_role = $role
+    | .task_flow.last_dispatch_at = $now
+    | if $role == "implementer" then
+        .task_flow.active_task_id = $task_id
+        | .review = (if (.review | type) == "object" then .review else {} end)
+        | .review.tasks = (if (.review.tasks | type) == "object" then .review.tasks else {} end)
+        | .review.tasks[$task_id] = (
+            if (.review.tasks[$task_id] | type) == "object" then
+              .review.tasks[$task_id]
+              | .spec_review_passed = ((.spec_review_passed // false) | bool_or_false)
+              | .code_review_passed = ((.code_review_passed // false) | bool_or_false)
+            else
+              {spec_review_passed:false, code_review_passed:false}
+            end
+          )
+      else
+        .
+      end
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
 }
@@ -1288,6 +1329,13 @@ if [ "$TOOL_NAME" = "Bash" ]; then
         append_unique_string_to_array "tdd.tests_verified_pass" "$TEST_PATH"
       fi
     fi
+  fi
+fi
+
+if [ "$HOOK_EVENT" = "PostToolUse" ] && [ "$TOOL_NAME" = "Agent" ]; then
+  agent_packet_metadata=""
+  if agent_packet_metadata="$(printf '%s' "$INPUT" | task_flow_packets_extract_posttool_packet_metadata 2>/dev/null)"; then
+    record_successful_agent_dispatch "$agent_packet_metadata"
   fi
 fi
 

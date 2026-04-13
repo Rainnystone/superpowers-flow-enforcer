@@ -22,6 +22,9 @@ assert_fresh_v2_state() {
   assert_json_equals "$file" '.workflow.override' 'null'
   assert_json_equals "$file" '.workflow.deactivated_by' 'null'
   assert_json_equals "$file" '.workflow.deactivated_at' 'null'
+  assert_json_equals "$file" '.task_flow.active_task_id' 'null'
+  assert_json_equals "$file" '.task_flow.active_packet_role' 'null'
+  assert_json_equals "$file" '.task_flow.last_dispatch_at' 'null'
 }
 
 assert_backup_matches_original() {
@@ -47,6 +50,9 @@ assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.active' 'fa
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.override' 'null'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_by' 'null'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_at' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.active_task_id' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.active_packet_role' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.last_dispatch_at' 'null'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.project_dir' "\"$SESSION_CWD\""
 
 write_v2_state_without_workflow "$SESSION_CWD/.claude/flow_state.json"
@@ -76,6 +82,36 @@ assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.workflow.deactivated_at' 'null'
 if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
   echo "Expected old v2 workflow state to normalize missing new workflow fields in place" >&2
+  exit 1
+fi
+
+write_v2_state_without_task_flow "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.active_task_id' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.active_packet_role' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.last_dispatch_at' 'null'
+if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
+  echo "Expected missing task_flow state to normalize in place without backup" >&2
+  exit 1
+fi
+
+write_v2_state_with_partial_task_flow "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.state_version' '2'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.active_task_id' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.active_packet_role' 'null'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.task_flow.last_dispatch_at' 'null'
+if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
+  echo "Expected partial task_flow state to normalize in place without backup" >&2
   exit 1
 fi
 
@@ -155,6 +191,48 @@ assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_backup_matches_original "$TMP_DIR/unsafe-workflow-fields.original" "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
 
+write_v2_state_with_invalid_task_flow_role_string "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-task-flow-role-string.original"
+
+if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+  echo "Expected init-state.sh to recover from invalid task_flow role string" >&2
+  cat /tmp/test-init-state.err >&2
+  exit 1
+fi
+
+assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_backup_matches_original "$TMP_DIR/unsafe-task-flow-role-string.original" "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
+
+write_v2_state_with_invalid_task_flow_role_type "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-task-flow-role-type.original"
+
+if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+  echo "Expected init-state.sh to recover from invalid task_flow role type" >&2
+  cat /tmp/test-init-state.err >&2
+  exit 1
+fi
+
+assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_backup_matches_original "$TMP_DIR/unsafe-task-flow-role-type.original" "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
+
+write_v2_state_with_non_object_task_flow "$SESSION_CWD/.claude/flow_state.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-task-flow-non-object.original"
+
+if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+  echo "Expected init-state.sh to recover from non-object task_flow" >&2
+  cat /tmp/test-init-state.err >&2
+  exit 1
+fi
+
+assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_backup_matches_original "$TMP_DIR/unsafe-task-flow-non-object.original" "$SESSION_CWD/.claude/flow_state.json.bak"
+assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
+
 export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 
 mkdir -p "$CLAUDE_PROJECT_DIR/.claude"
@@ -205,6 +283,9 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.state_version
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming.spec_written' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming.findings_updated_after_question' 'false'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'true'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.active_task_id' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.active_packet_role' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.last_dispatch_at' 'null'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.tdd.pending_failure_record' 'false'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.tdd.last_failed_command' 'null'
 assert_json_missing "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming.skill_invoked'
@@ -229,6 +310,9 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.state_version
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"planning"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming.spec_written' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.active_task_id' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.active_packet_role' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.last_dispatch_at' 'null'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.tdd.pending_failure_record' 'false'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.tdd.last_failed_command' 'null'
 assert_json_missing "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming.questions_asked'
@@ -608,3 +692,31 @@ cmp -s \
   echo "Expected v2 state to remain unchanged after rejected migration" >&2
   exit 1
 }
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+  echo "Expected migrate-state.sh --check-safe to accept valid task_flow in v2 state" >&2
+  cat /tmp/test-migrate-safe.err >&2
+  exit 1
+fi
+
+write_v2_state_without_task_flow "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+  echo "Expected migrate-state.sh --check-safe to allow missing task_flow for in-place normalization" >&2
+  cat /tmp/test-migrate-safe.err >&2
+  exit 1
+fi
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+jq '.task_flow = null' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp"
+mv "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+  echo "Expected migrate-state.sh --check-safe to reject null task_flow" >&2
+  exit 1
+fi
+
+write_v2_state_with_invalid_task_flow_role_string "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+  echo "Expected migrate-state.sh --check-safe to reject invalid task_flow role value" >&2
+  exit 1
+fi

@@ -56,6 +56,16 @@ The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` trac
 | PostToolUseFailure (Bash) | Trigger debugging-state sync on failed commands |
 | Stop | Command-only completion verification from `last_assistant_message` + workflow-aware stop gate |
 
+## Packetized Subagent Execution
+
+Runtime packet dispatch must follow this prefix contract in Agent prompts:
+
+- Implementer packets must include `SPFE_TASK_ID=<task-id>` and `SPFE_PACKET_ROLE=implementer` on the first two lines.
+- Spec review packets must use `SPFE_PACKET_ROLE=spec-reviewer`.
+- Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer`.
+- The next task's implementer packet must not start until the current open task has both `spec_review_passed == true` and `code_review_passed == true`.
+- Same-task fix and re-review loops are expected: failed spec or code review should be followed by implementer fixes on the same `SPFE_TASK_ID`, then re-dispatch of the required reviewer role.
+
 ## Skills Referenced
 
 This plugin enforces workflow from these superpowers skills:
