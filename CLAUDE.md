@@ -12,7 +12,7 @@ The plugin uses Claude Code hooks to enforce workflow only after explicit workfl
 - **Bash Runtime**: `PreToolUse/Bash` is command-only, silent while `workflow.active != true`, and uses the vendored `vendor/bash-traverse` runtime through Node 18+ once the workflow is active.
 - **Brainstorming / Planning**: After activation, SPEC writing still requires self-review and user approval before planning can proceed.
 - **TDD Phase**: Production code is blocked without a verified failing test.
-- **Review Phase**: Task completion requires two-stage review (spec + code quality).
+- **Review Phase**: Task completion requires two-stage review (spec + code quality), and packetized Agent dispatch cannot start the next task's implementer before the current open task has passed both review stages.
 - **Verification / Stop**: Completion claims still need fresh verification evidence from the current `last_assistant_message`. The Stop hook is command-only, and state-based stop gates fail open when state is missing, unreadable, or workflow is inactive.
 - **Debugging Phase**: Failed test commands still trigger debugging-state sync.
 
@@ -38,6 +38,7 @@ The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` trac
 - Current workflow phase
 - Workflow activation status (`workflow.active`, `workflow.override`, `workflow.activated_by`, `workflow.activated_at`, `workflow.deactivated_by`, `workflow.deactivated_at`)
 - Phase completion status
+- Active packetized task boundary state (`task_flow.active_task_id`, `task_flow.active_packet_role`, `task_flow.last_dispatch_at`)
 - Bypass exceptions and confirmations
 - Interrupt status
 
@@ -49,10 +50,10 @@ The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` trac
 | UserPromptSubmit | Detect bypass / interrupt requests and self-heal missing state |
 | PreToolUse (Edit\|Write) | Workflow-aware write gating + TDD enforcement |
 | PreToolUse (AskUserQuestion) | Brainstorming findings gate when workflow is active |
+| PreToolUse (Agent) | Packetized task-boundary gate + reviewer-role enforcement during superpowers execution |
 | PreToolUse (Bash) | Active Bash gate only when `workflow.active == true`; otherwise silent no-op |
-| PostToolUse (Write\|Edit) | SPEC self-review gate |
-| PostToolUse (Write) | Plan → Worktree gate |
-| PostToolUse (TaskCompleted) | Two-stage review completion check when workflow is active |
+| PostToolUse (*) | Workflow state sync, including successful Agent dispatch task-flow updates |
+| TaskCompleted (*) | Two-stage review completion check when workflow is active |
 | PostToolUseFailure (Bash) | Trigger debugging-state sync on failed commands |
 | Stop | Command-only completion verification from `last_assistant_message` + workflow-aware stop gate |
 
@@ -63,6 +64,7 @@ Runtime packet dispatch must follow this prefix contract in Agent prompts:
 - Implementer packets must include `SPFE_TASK_ID=<task-id>` and `SPFE_PACKET_ROLE=implementer` on the first two lines.
 - Spec review packets must use `SPFE_PACKET_ROLE=spec-reviewer`.
 - Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer`.
+- This is a `PreToolUse/Agent` command hook for packetized superpowers execution, not a global Agent ban.
 - The next task's implementer packet must not start until the current open task has both `spec_review_passed == true` and `code_review_passed == true`.
 - Same-task fix and re-review loops are expected: failed spec or code review should be followed by implementer fixes on the same `SPFE_TASK_ID`, then re-dispatch of the required reviewer role.
 

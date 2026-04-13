@@ -12,6 +12,7 @@
 - 在会话明确进入 superpowers workflow 之前，workflow-only 门禁默认 fail-open
 - Brainstorming → SPEC → Planning → TDD → Review → Verification → Finishing 工作流
 - 两阶段代码审查（spec 合规性 + 代码质量）
+- 在 superpowers packetized execution 中增加 subagent 的 task-boundary 门禁，当前任务双 review 未完成前不能启动下一个任务的 implementer
 - 完成声明前必须有新鲜验证证据
 - 测试失败时使用系统化调试方法论
 
@@ -72,11 +73,10 @@
 | UserPromptSubmit | * | Bypass / 中断检测 + 缺失状态自举 |
 | PreToolUse | Edit\|Write | workflow-aware 写入门禁 + TDD 铁律 |
 | PreToolUse | AskUserQuestion | 仅在 workflow 激活时要求更新 Brainstorming findings |
+| PreToolUse | Agent | 仅针对 superpowers packetized execution 的 task-boundary 门禁 + reviewer 角色约束 |
 | PreToolUse | Bash | 只有 `workflow.active == true` 时才执行 Bash gate，否则静默 no-op |
-| PostToolUse | Write\|Edit | SPEC 自审要求 |
-| PostToolUse | Write | Plan → Worktree 转换 |
-| PostToolUse | Bash | Worktree → 基准测试 |
-| PostToolUse | TaskCompleted | 仅在 workflow 激活时要求两阶段审查完成 |
+| PostToolUse | * | 工作流状态同步，包括成功的 Agent 派发后的 task_flow 更新 |
+| TaskCompleted | * | 仅在 workflow 激活时要求两阶段审查完成 |
 | PostToolUseFailure | Bash | 测试失败时系统化调试 |
 | Stop | * | 仅 command-only 完成验证，依据 `last_assistant_message` + workflow-aware 停止门禁 |
 
@@ -101,6 +101,22 @@ PreToolUse hook 执行 TDD 铁律：
 **TDD 例外**（配置文件、类型定义、文档、生成文件）:
 - 通过 PreToolUse 的路径白名单规则处理
 - 类别: config, types, docs, generated, specs, plugin
+
+## Packetized Subagent Execution
+
+这不是全局禁用 Agent，而是一个 `PreToolUse/Agent` 的 command hook，只在 superpowers 的 packetized execution 已经进入执行态时约束任务边界。
+
+运行时 Agent prompt 开头必须带上：
+
+- `SPFE_TASK_ID=<task-id>`
+- `SPFE_PACKET_ROLE=implementer|spec-reviewer|code-reviewer`
+
+强制规则如下：
+
+- 当前 open task 只有在 `spec_review_passed == true` 且 `code_review_passed == true` 后，才允许派发下一个任务的 `implementer`。
+- `spec-reviewer` 和 `code-reviewer` 必须是两个独立 reviewer 角色；合并 reviewer 或泛化 reviewer 包会被拒绝。
+- 当前任务 spec review 还没通过时，不允许先派发 `code-reviewer`。
+- 同一任务内的 `implementer -> fix -> re-review` 循环会继续放行，因此 review 意见可以在不新开任务的情况下闭环。
 
 ## Bypass 机制
 
@@ -152,8 +168,8 @@ scripts/
 ├── init-state.sh      # SessionStart 状态初始化
 ├── update-state.sh    # 状态更新辅助脚本
 ├── sync-user-prompt-state.sh # UserPromptSubmit 状态同步
-├── sync-post-tool-state.sh   # PostToolUse 状态同步
-├── check-pretool-gates.sh # PreToolUse/Edit|Write 和 AskUserQuestion gate
+├── sync-post-tool-state.sh   # PostToolUse 状态同步，包括 Agent task_flow 同步
+├── check-pretool-gates.sh # PreToolUse/Edit|Write、AskUserQuestion 和 Agent gate
 ├── check-bash-command-gate.sh # PreToolUse/Bash gate
 ├── check-bash-command-gate-node.cjs # vendored bash-traverse 分析 runtime
 ├── check-task-completed.sh # TaskCompleted gate
@@ -176,6 +192,7 @@ vendor/
 - `planning.*`: `plan_written`、`plan_file`、`execution_mode`
 - `worktree.*`: `created`、`path`、`baseline_verified`
 - `tdd.*`: `pending_failure_record`、`last_failed_command`、`test_files_created`、`production_files_written`、`tests_verified_fail`、`tests_verified_pass`
+- `task_flow.*`: `active_task_id`、`active_packet_role`、`last_dispatch_at`
 - `review.tasks`: 每个任务的审查状态
 - `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found

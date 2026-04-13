@@ -12,6 +12,7 @@ The plugin implements workflow-aware hooks that enforce:
 - Workflow-only gates fail open until the session explicitly enters the superpowers workflow
 - Brainstorming → SPEC → Planning → TDD → Review → Verification → Finishing workflow
 - Two-stage code review (spec compliance + code quality)
+- Packetized subagent task-boundary gating during superpowers execution, so the next task's implementer cannot start before the current task passes both reviews
 - Fresh verification evidence before completion claims
 - Systematic debugging methodology on test failures
 
@@ -72,11 +73,10 @@ Manual control is also available when you do not want to rely on path-based auto
 | UserPromptSubmit | * | Bypass / interrupt detection + missing-state bootstrap |
 | PreToolUse | Edit\|Write | Workflow-aware write gating + TDD IRON LAW |
 | PreToolUse | AskUserQuestion | Brainstorming findings update when workflow is active |
+| PreToolUse | Agent | Packetized task-boundary gate + reviewer-role enforcement for superpowers execution |
 | PreToolUse | Bash | Active Bash gate only when `workflow.active == true`; otherwise silent no-op |
-| PostToolUse | Write\|Edit | SPEC self-review required |
-| PostToolUse | Write | Plan → Worktree transition |
-| PostToolUse | Bash | Worktree → Baseline tests |
-| PostToolUse | TaskCompleted | Two-stage review completion when workflow is active |
+| PostToolUse | * | Workflow state sync, including successful Agent dispatch task-flow updates |
+| TaskCompleted | * | Two-stage review completion when workflow is active |
 | PostToolUseFailure | Bash | Systematic debugging on test failure |
 | Stop | * | Command-only completion verification from `last_assistant_message` + workflow-aware stop gate |
 
@@ -101,6 +101,22 @@ When writing a production file (e.g., `src/utils/helper.ts`):
 **TDD exceptions** (config files, type definitions, docs, generated files):
 - Handled by the PreToolUse path allow-list rules
 - Categories: config, types, docs, generated, specs, plugin
+
+## Packetized Subagent Execution
+
+This gate is not a global Agent ban. It is a `PreToolUse/Agent` command hook that only constrains packetized superpowers execution once the workflow and task flow are active.
+
+Runtime Agent prompts must start with:
+
+- `SPFE_TASK_ID=<task-id>`
+- `SPFE_PACKET_ROLE=implementer|spec-reviewer|code-reviewer`
+
+Enforced behavior:
+
+- A new task's `implementer` packet is blocked until the current open task has both `spec_review_passed == true` and `code_review_passed == true`.
+- `spec-reviewer` and `code-reviewer` are separate reviewer roles; a combined or generic reviewer packet is rejected.
+- `code-reviewer` cannot start before the current task has passed spec review.
+- Same-task `implementer -> fix -> re-review` loops remain allowed, so review feedback can be addressed without reopening a new task.
 
 ## Bypass Mechanism
 
@@ -151,8 +167,8 @@ scripts/
 ├── init-state.sh      # SessionStart state initialization
 ├── update-state.sh    # State update helper
 ├── sync-user-prompt-state.sh # UserPromptSubmit state sync
-├── sync-post-tool-state.sh   # PostToolUse state sync
-├── check-pretool-gates.sh # PreToolUse/Edit|Write and AskUserQuestion gate
+├── sync-post-tool-state.sh   # PostToolUse state sync, including Agent task-flow sync
+├── check-pretool-gates.sh # PreToolUse/Edit|Write, AskUserQuestion, and Agent gate
 ├── check-bash-command-gate.sh # PreToolUse/Bash gate
 ├── check-bash-command-gate-node.cjs # Vendored bash-traverse analysis runtime
 ├── check-task-completed.sh # TaskCompleted gate
@@ -175,6 +191,7 @@ Tracks:
 - `planning.*`: `plan_written`, `plan_file`, `execution_mode`
 - `worktree.*`: `created`, `path`, `baseline_verified`
 - `tdd.*`: `pending_failure_record`, `last_failed_command`, `test_files_created`, `production_files_written`, `tests_verified_fail`, `tests_verified_pass`
+- `task_flow.*`: `active_task_id`, `active_packet_role`, `last_dispatch_at`
 - `review.tasks`: per-task review status
 - `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found
