@@ -1,0 +1,19 @@
+{
+  "name": "superpowers-flow-enforcer",
+  "version": "1.0.0",
+  "description": "Enforces workflow-aware superpowers hooks to prevent skipping key development phases.",
+  "author": {
+    "name": "Rainnystone",
+    "url": "https://github.com/Rainnystone"
+  },
+  "homepage": "https://github.com/Rainnystone/superpowers-flow-enforcer",
+  "repository": "https://github.com/Rainnystone/superpowers-flow-enforcer",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "plugin",
+    "hooks",
+    "workflow",
+    "superpowers"
+  ]
+}
