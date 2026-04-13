@@ -1,6 +1,6 @@
 {
   "name": "superpowers-flow-enforcer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Enforces superpowers workflow through hooks - prevents skipping brainstorming, TDD, review, verification, and debugging phases",
   "author": "Claude + User",
   "license": "MIT",

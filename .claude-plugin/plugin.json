@@ -1,6 +1,6 @@
 {
   "name": "superpowers-flow-enforcer",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Enforces workflow-aware superpowers hooks to prevent skipping key development phases.",
   "author": {
     "name": "Rainnystone",
