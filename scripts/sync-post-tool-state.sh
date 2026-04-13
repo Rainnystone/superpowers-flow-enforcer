@@ -32,88 +32,11 @@ HOOK_CWD="$(printf '%s' "$INPUT" | jq -r '
     empty
   end
 ' 2>/dev/null || true)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/workflow_paths.sh
+source "$SCRIPT_DIR/lib/workflow_paths.sh"
 
-resolve_state_root_from_candidate() {
-  local candidate="$1"
-
-  if [ -z "$candidate" ]; then
-    return
-  fi
-
-  local current="$candidate"
-  if [ ! -d "$current" ]; then
-    current="$(dirname "$current")"
-  fi
-
-  if [ ! -d "$current" ]; then
-    return
-  fi
-
-  current="$(cd "$current" 2>/dev/null && pwd -P)" || return
-
-  while :; do
-    if [ -f "$current/.claude/flow_state.json" ]; then
-      printf '%s\n' "$current"
-      return
-    fi
-
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
-  done
-}
-
-resolve_state_root_alias_from_candidate() {
-  local candidate="$1"
-
-  if [ -z "$candidate" ]; then
-    return
-  fi
-
-  local current="$candidate"
-  if [ ! -d "$current" ]; then
-    current="$(dirname "$current")"
-  fi
-
-  if [ ! -d "$current" ]; then
-    return
-  fi
-
-  while :; do
-    if [ -f "$current/.claude/flow_state.json" ]; then
-      printf '%s\n' "$current"
-      return
-    fi
-
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
-  done
-}
-
-resolve_project_dir() {
-  local resolved=""
-
-  resolved="$(resolve_state_root_from_candidate "${CLAUDE_PROJECT_DIR:-}")"
-  if [ -n "$resolved" ]; then
-    printf '%s\n' "$resolved"
-    return
-  fi
-
-  local hook_cwd
-  hook_cwd="$HOOK_CWD"
-
-  resolved="$(resolve_state_root_from_candidate "$hook_cwd")"
-  if [ -n "$resolved" ]; then
-    printf '%s\n' "$resolved"
-  fi
-}
-
-PROJECT_DIR="$(resolve_project_dir)"
+PROJECT_DIR="$(workflow_paths_resolve_project_root "$HOOK_CWD")"
 if [ -z "$PROJECT_DIR" ]; then
   allow_hook
 fi
@@ -155,43 +78,6 @@ append_unique_string_to_array() {
     setpathstr($path; $value)
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
-}
-
-normalize_workflow_entry_path() {
-  local path="$1"
-  local root_alias
-  local path_physical=""
-  local path_dir=""
-  local path_name=""
-
-  while [[ "$path" == ./* ]]; do
-    path="${path#./}"
-  done
-
-  if [[ "$path" = /* ]]; then
-    path_dir="$(dirname "$path")"
-    path_name="${path##*/}"
-    if [ -d "$path_dir" ]; then
-      path_physical="$(cd "$path_dir" 2>/dev/null && pwd -P)/$path_name"
-    fi
-  fi
-
-  for root_alias in \
-    "$PROJECT_DIR" \
-    "$(resolve_state_root_alias_from_candidate "${CLAUDE_PROJECT_DIR:-}")" \
-    "$(resolve_state_root_alias_from_candidate "$HOOK_CWD")"
-  do
-    if [ -n "$root_alias" ] && [[ "$path" == "$root_alias"/* ]]; then
-      path="${path#"$root_alias"/}"
-      break
-    fi
-  done
-
-  if [ -n "$path_physical" ] && [ -n "$PROJECT_DIR" ] && [[ "$path_physical" == "$PROJECT_DIR"/* ]]; then
-    path="${path_physical#"$PROJECT_DIR"/}"
-  fi
-
-  printf '%s\n' "$path"
 }
 
 extract_worktree_path() {
@@ -1310,14 +1196,16 @@ fi
 if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
   FILE_PATH="$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // ""')"
   if [ -n "$FILE_PATH" ]; then
-    NORMALIZED_FILE_PATH="$(normalize_workflow_entry_path "$FILE_PATH")"
+    NORMALIZED_FILE_PATH="$(workflow_paths_normalize_project_relative_path "$FILE_PATH" "$PROJECT_DIR" "$HOOK_CWD")"
+    CANONICAL_WORKFLOW_KIND="$(workflow_paths_classify_canonical_write "$NORMALIZED_FILE_PATH")"
+    WORKFLOW_OVERRIDE="$(jq -r 'if (.workflow.override | type) == "string" then .workflow.override else "" end' "$STATE_FILE")"
 
     if [ "$(basename "$FILE_PATH")" = "findings.md" ]; then
       jq --arg now "$NOW_UTC" '.current_phase = "brainstorming" | .brainstorming.findings_updated_after_question = true | .brainstorming.findings_last_update = $now' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
     fi
 
-    if echo "$NORMALIZED_FILE_PATH" | grep -qE '^docs/superpowers/specs/.*\.md$'; then
+    if [ "$WORKFLOW_OVERRIDE" != "manual_off" ] && [ "$CANONICAL_WORKFLOW_KIND" = "spec" ]; then
       jq --arg path "$FILE_PATH" --arg now "$NOW_UTC" '
         .current_phase = "brainstorming"
         | .brainstorming.spec_written = true
@@ -1330,7 +1218,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
       SPEC_WRITE_RECORDED=true
     fi
 
-    if echo "$NORMALIZED_FILE_PATH" | grep -qE '^docs/superpowers/plans/.*\.md$'; then
+    if [ "$WORKFLOW_OVERRIDE" != "manual_off" ] && [ "$CANONICAL_WORKFLOW_KIND" = "plan" ]; then
       jq --arg path "$FILE_PATH" --arg now "$NOW_UTC" '
         .current_phase = "planning"
         | .planning.plan_written = true
