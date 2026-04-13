@@ -101,6 +101,13 @@ The plugin must support two exact manual control phrases:
 
 These phrases provide a stable control surface that does not depend on path choice.
 
+Matching should use normalized prompt text:
+
+1. trim leading and trailing whitespace
+2. collapse internal repeated whitespace
+3. match the exact control phrase as a normalized substring, so prompts such as `请先激活 superpowers enforcer` still count
+4. do not treat vague paraphrases as equivalent in this round
+
 ### 4. Inactive workflow remains the no-op boundary
 
 This round does not try to stop official Claude Code lifecycle events from firing. Instead, it preserves the practical product boundary:
@@ -276,7 +283,7 @@ Auto-activate from canonical artifact:
 
 1. if `.workflow.override == "manual_off"`, do nothing
 2. otherwise set `.workflow.active = true`
-3. set `.workflow.override = null`
+3. if `.workflow.override != "manual_on"`, set `.workflow.override = null`
 4. record `activated_by = "spec_write"` or `activated_by = "plan_write"`
 5. update `activated_at`
 
