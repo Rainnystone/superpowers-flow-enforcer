@@ -301,12 +301,14 @@ When `source == "resume"`:
 
 1. normalize or bootstrap the resume state object if needed
 2. record `resume.last_resume_source = "resume"`
-3. determine whether recovery is required
-4. if recovery is required:
+3. evaluate deterministic clear conditions first
+4. if a deterministic clear condition holds:
+   - set `resume.recovery_required = false`
+5. otherwise evaluate whether recovery is required
+6. if recovery is required:
    - set `resume.recovery_required = true`
    - inject a short context hint telling Claude to run the dedicated recovery skill before continuing
-5. if recovery is not required:
-   - leave `resume.recovery_required = false`
+7. otherwise preserve the existing `resume.recovery_required` value
 
 ### Recovery-required rule
 
@@ -334,16 +336,22 @@ This is separate from manual shutdown:
 1. `workflow.override == "manual_off"` is a clean manual closure path
 2. an active session with partial review state is **not** cleanly finished
 
-### Progress signals for recovery-required evaluation
+### Exact progress predicate for recovery-required evaluation
 
-Representative progress signals include:
+For this round, `there is evidence the workflow had actually progressed beyond a trivial inactive shell` must be implemented as this exact OR predicate:
 
 1. `current_phase != "init"`
-2. `brainstorming.spec_written == true`
-3. `planning.plan_written == true`
-4. `worktree.created == true`
-5. `task_flow.active_task_id != null`
-6. non-empty `review.tasks`
+2. `brainstorming.question_asked == true`
+3. `brainstorming.spec_written == true`
+4. `planning.plan_written == true`
+5. `worktree.created == true`
+6. `task_flow.active_task_id != null`
+7. non-empty `review.tasks`
+8. any of the TDD tracking arrays are non-empty:
+   - `tdd.test_files_created`
+   - `tdd.production_files_written`
+   - `tdd.tests_verified_fail`
+   - `tdd.tests_verified_pass`
 
 Representative no-gate cases include:
 
@@ -379,7 +387,11 @@ This round pins the skill to a concrete repo boundary:
 1. primary skill file: `skills/resume-enforcer/SKILL.md`
 2. explicit resume-state recording helper: `scripts/record-resume-state.sh`
 
-The exact installed slash form may still depend on Claude Code plugin skill naming, but the shipped user-facing docs should present the shortest real invocation surface available to the plugin packaging model. The implementation plan must therefore plan against the concrete file boundary above, not against an abstract conceptual command.
+For this plugin packaging model, the user-facing installed invocation should be documented as:
+
+1. `/superpowers-flow-enforcer:resume-enforcer`
+
+Within this design document, `resume-enforcer` may still be used as shorthand for the skill itself. The implementation plan must plan against the concrete file boundary above and the fully qualified installed invocation surface above.
 
 ### Invocation model
 
