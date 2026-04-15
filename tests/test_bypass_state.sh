@@ -579,6 +579,48 @@ assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
 
+POSITIVE_STOP_AFTER_STEP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop after this step"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_STOP_AFTER_STEP_OUTPUT" ]; then
+  echo "Expected stop after this step prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop after this step"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
+
+POSITIVE_STOP_DO_NOT_CONTINUE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop and do not continue"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_STOP_DO_NOT_CONTINUE_OUTPUT" ]; then
+  echo "Expected stop and do not continue prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop and do not continue"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
+
+POSITIVE_STOP_IF_TOO_LONG_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop if this takes too long"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_STOP_IF_TOO_LONG_OUTPUT" ]; then
+  echo "Expected stop if this takes too long prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop if this takes too long"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
+
 NEGATIVE_QUOTED_STOP_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain \"stop\" semantics"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh

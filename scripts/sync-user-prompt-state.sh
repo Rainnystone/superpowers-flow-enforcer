@@ -250,11 +250,12 @@ is_interrupt_stop_discussion_prompt() {
     return 1
   fi
 
-  if is_manual_control_clause_explanatory "$PROMPT_LC"; then
+  if echo "$PROMPT_LC" | grep -qE '["'"'"'`][[:space:]]*stop[[:space:]]*["'"'"'`]' ; then
     return 0
   fi
 
-  if echo "$PROMPT_LC" | grep -qF '"stop"' || echo "$PROMPT_LC" | grep -qF "'stop'" || echo "$PROMPT_LC" | grep -qF '`stop`'; then
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+does|what[[:space:]]+is)([[:space:][:punct:]]|$)' && \
+    echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
     return 0
   fi
 
@@ -262,23 +263,7 @@ is_interrupt_stop_discussion_prompt() {
 }
 
 is_interrupt_stop_prompt() {
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:punct:]]|$)'; then
-    return 0
-  fi
-
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+here([[:space:][:punct:]]|$)'; then
-    return 0
-  fi
-
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+now([[:space:][:punct:]]|$)'; then
-    return 0
-  fi
-
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+for[[:space:]]+now([[:space:][:punct:]]|$)'; then
-    return 0
-  fi
-
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+here[[:space:]]+and[[:space:]]+continue[[:space:]]+tomorrow([[:space:][:punct:]]|$)'; then
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
     return 0
   fi
 
