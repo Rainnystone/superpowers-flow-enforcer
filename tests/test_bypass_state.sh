@@ -648,6 +648,62 @@ assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
+
+NEGATIVE_DO_NOT_STOP_YET_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please do not stop yet"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_DO_NOT_STOP_YET_OUTPUT" ]; then
+  echo "Expected negated stop prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+
+NEGATIVE_CHINESE_EXPLAIN_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"不要 stop，我是在解释这个词"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_CHINESE_EXPLAIN_STOP_OUTPUT" ]; then
+  echo "Expected Chinese explanatory stop prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+
+NEGATIVE_WHAT_HAPPENS_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"What happens if I say stop?"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_WHAT_HAPPENS_STOP_OUTPUT" ]; then
+  echo "Expected stop discussion question prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+
+NEGATIVE_IF_WRITE_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"If I write stop here, what happens?"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_IF_WRITE_STOP_OUTPUT" ]; then
+  echo "Expected conditional stop discussion prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
 jq '.interrupt.allowed = true | .interrupt.reason = "stale interrupt" | .interrupt.keywords_detected = ["legacy keyword"]' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
 

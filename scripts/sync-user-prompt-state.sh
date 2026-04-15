@@ -254,8 +254,11 @@ is_interrupt_stop_discussion_prompt() {
     return 0
   fi
 
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+does|what[[:space:]]+is)([[:space:][:punct:]]|$)' && \
-    echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])(do[[:space:]]+not|don.?t|dont|不要|别)[[:space:]]+stop([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+happens|what[[:space:]]+if|what[[:space:]]+does|what[[:space:]]+is|how[[:space:]]+does|how[[:space:]]+about)([[:space:][:punct:]]|$)'; then
     return 0
   fi
 
