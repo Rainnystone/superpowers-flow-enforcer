@@ -235,10 +235,30 @@ NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
 
 record_interrupt_if_requested() {
+  if is_interrupt_stop_discussion_prompt; then
+    return
+  fi
+
   if echo "$PROMPT_LC" | grep -qE '停止|pause|暂停|明天继续|稍后继续|休息一下|break' || is_interrupt_stop_prompt; then
     jq --arg reason "$USER_PROMPT" '.interrupt.allowed = true | .interrupt.reason = $reason | del(.interrupt.keywords_detected)' "$STATE_FILE" > "$tmp_file"
     mv "$tmp_file" "$STATE_FILE"
   fi
+}
+
+is_interrupt_stop_discussion_prompt() {
+  if ! echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
+    return 1
+  fi
+
+  if is_manual_control_clause_explanatory "$PROMPT_LC"; then
+    return 0
+  fi
+
+  if echo "$PROMPT_LC" | grep -qF '"stop"' || echo "$PROMPT_LC" | grep -qF "'stop'" || echo "$PROMPT_LC" | grep -qF '`stop`'; then
+    return 0
+  fi
+
+  return 1
 }
 
 is_interrupt_stop_prompt() {
