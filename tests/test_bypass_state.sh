@@ -460,6 +460,62 @@ assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
 assert_json_equals "$STATE_FILE" '.workflow.deactivated_at' 'null'
 
 write_v2_state "$STATE_FILE"
+
+SHORT_MANUAL_ACTIVATE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"请开启 enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$SHORT_MANUAL_ACTIVATE_OUTPUT" ]; then
+  echo "Expected short manual activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+
+write_v2_state "$STATE_FILE"
+
+SHORT_MANUAL_DEACTIVATE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"先整理上下文，然后关闭 enforcer 再继续"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$SHORT_MANUAL_DEACTIVATE_OUTPUT" ]; then
+  echo "Expected short manual deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+
+write_v2_state "$STATE_FILE"
+
+ENGLISH_SHORT_MANUAL_ACTIVATE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please enable enforcer, thanks"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$ENGLISH_SHORT_MANUAL_ACTIVATE_OUTPUT" ]; then
+  echo "Expected English short manual activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+
+write_v2_state "$STATE_FILE"
+
+SHORT_MANUAL_DEACTIVATE_WITH_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer and stop for now"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$SHORT_MANUAL_DEACTIVATE_WITH_STOP_OUTPUT" ]; then
+  echo "Expected short manual deactivate prompt with stop to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+
+write_v2_state "$STATE_FILE"
 STATE_SNAPSHOT_BEFORE_MALFORMED_PROMPT="$(jq -c . "$STATE_FILE")"
 
 MISSING_PROMPT_OUTPUT="$(

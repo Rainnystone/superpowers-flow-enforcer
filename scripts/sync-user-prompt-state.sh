@@ -139,7 +139,7 @@ is_manual_control_clause_start() {
 
 is_manual_control_clause_continuation() {
   case "$1" in
-    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|please*)
+    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|and\ stop*|stop*|please*)
       return 0
       ;;
   esac
@@ -265,11 +265,11 @@ emit_skip_block_json() {
 }
 
 is_manual_deactivate_prompt() {
-  matches_manual_control_phrase "关闭 superpowers enforcer" || matches_manual_control_phrase "deactivate superpowers enforcer"
+  matches_manual_control_phrase "关闭 superpowers enforcer" || matches_manual_control_phrase "deactivate superpowers enforcer" || matches_manual_control_phrase "关闭 enforcer" || matches_manual_control_phrase "disable enforcer"
 }
 
 is_manual_activate_prompt() {
-  matches_manual_control_phrase "激活 superpowers enforcer" || matches_manual_control_phrase "activate superpowers enforcer"
+  matches_manual_control_phrase "激活 superpowers enforcer" || matches_manual_control_phrase "activate superpowers enforcer" || matches_manual_control_phrase "开启 enforcer" || matches_manual_control_phrase "enable enforcer"
 }
 
 confirmation_phase=""
@@ -312,9 +312,6 @@ if is_manual_deactivate_prompt; then
     | .workflow.deactivated_at = $now
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
-
-  record_interrupt_if_requested
-
   exit 0
 fi
 
@@ -328,9 +325,6 @@ if is_manual_activate_prompt; then
     | .workflow.deactivated_at = null
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
-
-  record_interrupt_if_requested
-
   exit 0
 fi
 
