@@ -58,28 +58,28 @@ Use the three pieces together during brainstorming, spec, planning, execution, r
 
 The plugin does not force workflow entry on every Claude Code session. If the workflow never becomes active, workflow-only gates remain inactive and ordinary Claude Code work is not blocked by those phase checks.
 
-Manual control is also available when you do not want to rely on path-based auto-entry. The recommended control surface in this round is:
+Manual control is also available when you do not want to rely on path-based auto-entry. Use one of these exact commands after whitespace normalization:
 
 - `开启 enforcer`
 - `关闭 enforcer`
 - `enable enforcer`
 - `disable enforcer`
 
-Long-form compatibility still exists for existing habits and scripts:
+Long-form compatibility still exists for existing habits and scripts, using the same exact-command rule:
 
 - `激活 superpowers enforcer`
 - `关闭 superpowers enforcer`
 - `activate superpowers enforcer`
 - `deactivate superpowers enforcer`
 
-`启动 enforcer`, `停止 enforcer`, `start enforcer`, and `stop enforcer` are NOT SUPPORTED in this round. Use `disable enforcer` / `关闭 enforcer` to turn enforcement off. Do not rely on `stop` to disable enforcement.
+Prompts such as `Please enable enforcer, thanks` or `disable enforcer and stop for now` do not count as control commands in this round. `启动 enforcer`, `停止 enforcer`, `start enforcer`, and `stop enforcer` are NOT SUPPORTED. Use `disable enforcer` / `关闭 enforcer` to turn enforcement off. Do not rely on `stop` to disable enforcement.
 
 ## Hook System
 
 | Hook Event | Matcher | Enforcement |
 |------------|---------|-------------|
 | SessionStart | * | Initialize workflow state |
-| UserPromptSubmit | * | Bypass / exact-command interrupt detection + missing-state bootstrap |
+| UserPromptSubmit | * | Bypass / exact-command manual control / exact-command interrupt detection + missing-state bootstrap |
 | PreToolUse | Edit\|Write | Workflow-aware write gating + TDD IRON LAW |
 | PreToolUse | AskUserQuestion | Brainstorming findings update when workflow is active |
 | PreToolUse | Agent | Packetized task-boundary gate + reviewer-role enforcement for superpowers execution |

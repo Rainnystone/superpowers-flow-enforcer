@@ -311,9 +311,9 @@ if [ -n "$MID_SENTENCE_ACTIVATE_OUTPUT" ]; then
   echo "Expected mid-sentence activate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
 
 ENGLISH_MID_SENTENCE_ACTIVATE_OUTPUT="$(
   write_v2_state "$STATE_FILE"
@@ -324,9 +324,9 @@ if [ -n "$ENGLISH_MID_SENTENCE_ACTIVATE_OUTPUT" ]; then
   echo "Expected English mid-sentence activate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
 
 POLITE_ACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"请激活 superpowers enforcer，谢谢"}' "$MANUAL_PROMPT_PROJECT" \
@@ -336,9 +336,9 @@ if [ -n "$POLITE_ACTIVATE_OUTPUT" ]; then
   echo "Expected polite activate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
 
 ENGLISH_POLITE_ACTIVATE_OUTPUT="$(
   write_v2_state "$STATE_FILE"
@@ -347,6 +347,32 @@ ENGLISH_POLITE_ACTIVATE_OUTPUT="$(
 )"
 if [ -n "$ENGLISH_POLITE_ACTIVATE_OUTPUT" ]; then
   echo "Expected English polite activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
+
+POSITIVE_ACTIVATE_EXACT_OUTPUT="$(
+  write_v2_state "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"激活 superpowers enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_ACTIVATE_EXACT_OUTPUT" ]; then
+  echo "Expected exact activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+
+POSITIVE_ACTIVATE_EXACT_EN_OUTPUT="$(
+  write_v2_state "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"activate superpowers enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_ACTIVATE_EXACT_EN_OUTPUT" ]; then
+  echo "Expected exact English activate prompt to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
@@ -361,9 +387,9 @@ if [ -n "$MID_SENTENCE_DEACTIVATE_OUTPUT" ]; then
   echo "Expected mid-sentence deactivate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
 
 ENGLISH_MID_SENTENCE_DEACTIVATE_OUTPUT="$(
   jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt"' "$STATE_FILE" > "$STATE_FILE.tmp"
@@ -375,9 +401,9 @@ if [ -n "$ENGLISH_MID_SENTENCE_DEACTIVATE_OUTPUT" ]; then
   echo "Expected English mid-sentence deactivate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
 
 POLITE_DEACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"请关闭 superpowers enforcer，谢谢"}' "$MANUAL_PROMPT_PROJECT" \
@@ -387,9 +413,9 @@ if [ -n "$POLITE_DEACTIVATE_OUTPUT" ]; then
   echo "Expected polite deactivate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
 
 ENGLISH_POLITE_DEACTIVATE_OUTPUT="$(
   jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt"' "$STATE_FILE" > "$STATE_FILE.tmp"
@@ -399,6 +425,31 @@ ENGLISH_POLITE_DEACTIVATE_OUTPUT="$(
 )"
 if [ -n "$ENGLISH_POLITE_DEACTIVATE_OUTPUT" ]; then
   echo "Expected English polite deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
+
+POSITIVE_DEACTIVATE_EXACT_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"deactivate superpowers enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_DEACTIVATE_EXACT_OUTPUT" ]; then
+  echo "Expected exact deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+
+POSITIVE_SHORT_DEACTIVATE_EXACT_EN_OUTPUT="$(
+  write_v2_state "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_SHORT_DEACTIVATE_EXACT_EN_OUTPUT" ]; then
+  echo "Expected exact English short deactivate prompt to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
@@ -413,9 +464,9 @@ if [ -n "$MANUAL_ACTIVATE_OUTPUT" ]; then
   echo "Expected manual activate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
 
 MANUAL_DEACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"先   关闭   superpowers   enforcer  再说"}' "$MANUAL_PROMPT_PROJECT" \
@@ -453,11 +504,10 @@ if [ -n "$MANUAL_ACTIVATE_AFTER_MANUAL_OFF_OUTPUT" ]; then
   echo "Expected manual activate after manual off to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_at' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
 
 write_v2_state "$STATE_FILE"
 
@@ -467,6 +517,18 @@ SHORT_MANUAL_ACTIVATE_OUTPUT="$(
 )"
 if [ -n "$SHORT_MANUAL_ACTIVATE_OUTPUT" ]; then
   echo "Expected short manual activate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+
+POSITIVE_SHORT_ACTIVATE_EXACT_CN_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"开启 enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_SHORT_ACTIVATE_EXACT_CN_OUTPUT" ]; then
+  echo "Expected exact Chinese short activate prompt to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
@@ -485,9 +547,9 @@ if [ -n "$SHORT_MANUAL_DEACTIVATE_OUTPUT" ]; then
   echo "Expected short manual deactivate prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
-assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'true'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 
 write_v2_state "$STATE_FILE"
@@ -516,6 +578,18 @@ if [ -n "$ENGLISH_SHORT_MANUAL_ACTIVATE_OUTPUT" ]; then
   echo "Expected English short manual activate prompt to be silent allow" >&2
   exit 1
 fi
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+
+POSITIVE_SHORT_ACTIVATE_EXACT_EN_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"ENABLE ENFORCER"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_SHORT_ACTIVATE_EXACT_EN_OUTPUT" ]; then
+  echo "Expected exact English short activate prompt to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
@@ -530,8 +604,8 @@ if [ -n "$SHORT_MANUAL_DEACTIVATE_WITH_STOP_OUTPUT" ]; then
   echo "Expected short manual deactivate prompt with stop to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 
 write_v2_state "$STATE_FILE"
@@ -780,17 +854,16 @@ DISABLE_CLEARS_STALE_INTERRUPT_OUTPUT="$(
     | bash scripts/sync-user-prompt-state.sh
 )"
 if [ -n "$DISABLE_CLEARS_STALE_INTERRUPT_OUTPUT" ]; then
-  echo "Expected disable enforcer and stop for now to be silent allow" >&2
+  echo "Expected disable enforcer and stop for now discussion prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
-assert_json_equals "$STATE_FILE" '.workflow.activated_at' 'null'
-assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"stale interrupt"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '["legacy keyword"]'
 
 write_v2_state "$STATE_FILE"
 STATE_SNAPSHOT_BEFORE_MALFORMED_PROMPT="$(jq -c . "$STATE_FILE")"

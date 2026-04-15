@@ -243,14 +243,21 @@ infer_candidate_tests() {
 has_verified_failing_candidate() {
   local path="$1"
   local candidate failed normalized_failed
-  local -a candidates failed_tests
+  local -a candidates=()
+  local -a failed_tests=()
+  local line
 
-  mapfile -t candidates < <(infer_candidate_tests "$path")
-  mapfile -t failed_tests < <(jq -r '.tdd.tests_verified_fail[]? | select(type == "string")' "$STATE_FILE")
+  while IFS= read -r line; do
+    candidates+=("$line")
+  done < <(infer_candidate_tests "$path")
 
-  for failed in "${failed_tests[@]}"; do
+  while IFS= read -r line; do
+    failed_tests+=("$line")
+  done < <(jq -r '.tdd.tests_verified_fail[]? | select(type == "string")' "$STATE_FILE")
+
+  for failed in "${failed_tests[@]-}"; do
     normalized_failed="$(normalize_recorded_path "$failed")"
-    for candidate in "${candidates[@]}"; do
+    for candidate in "${candidates[@]-}"; do
       if [ "$normalized_failed" = "$candidate" ]; then
         return 0
       fi

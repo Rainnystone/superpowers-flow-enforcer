@@ -111,140 +111,6 @@ normalize_prompt_text() {
   printf '%s' "$1" | tr -s '[:space:]' ' ' | sed -e 's/^ //' -e 's/ $//'
 }
 
-split_manual_control_clauses() {
-  local text="$1"
-  text="${text//，/$'\n'}"
-  text="${text//,/$'\n'}"
-  text="${text//。/$'\n'}"
-  text="${text//！/$'\n'}"
-  text="${text//!/$'\n'}"
-  text="${text//？/$'\n'}"
-  text="${text//\?/$'\n'}"
-  text="${text//；/$'\n'}"
-  text="${text//;/$'\n'}"
-  text="${text//：/$'\n'}"
-  text="${text//:/$'\n'}"
-  printf '%s\n' "$text"
-}
-
-is_manual_control_clause_start() {
-  case "$1" in
-    ""|请|请先|先|然后|再|接着|随后|请再|麻烦|麻烦请|请帮我|请直接|please|please\ just|just|then|and\ then|now)
-      return 0
-      ;;
-  esac
-
-  return 1
-}
-
-is_manual_control_clause_continuation() {
-  local text
-  local tail
-
-  text="$(normalize_prompt_text "$1")"
-
-  case "$text" in
-    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|please*)
-      return 0
-      ;;
-  esac
-
-  case "$text" in
-    and\ stop\ for\ now*|stop\ for\ now*)
-      tail="${text#*stop for now}"
-      tail="$(normalize_prompt_text "$tail")"
-      if [ -n "$tail" ] && is_manual_control_clause_explanatory "$tail"; then
-        return 1
-      fi
-      return 0
-      ;;
-  esac
-
-  return 1
-}
-
-is_manual_control_clause_explanatory() {
-  case "$1" in
-    *不要*|*别*|*不是*|*如果*|*假如*|*说明*|*解释*|*含义*|*意思*|*语义*|*semantics*|*例子*|*举例*|*比如*|*例如*|*会做什么*|*什么意思*|*do\ not*|*don\'t*|*not*|*if*|*suppose*|*explain*|*meaning*|*example*|*for\ example*|*what\ will*|*what\ does*|*what\ happens*|*what\ would*)
-      return 0
-      ;;
-  esac
-
-  return 1
-}
-
-matches_manual_control_phrase() {
-  local phrase="$1"
-  local clauses=()
-  local clause
-
-  while IFS= read -r clause; do
-    clause="$(normalize_prompt_text "$clause")"
-    if [ -n "$clause" ]; then
-      clauses+=("$clause")
-    fi
-  done < <(split_manual_control_clauses "$PROMPT_LC")
-
-  local clause_index
-  for clause_index in "${!clauses[@]}"; do
-    clause="${clauses[$clause_index]}"
-    case "$clause" in
-      *"$phrase"*) ;;
-      *)
-        continue
-        ;;
-    esac
-
-    local prefix
-    local suffix
-    prefix="$(normalize_prompt_text "${clause%%"$phrase"*}")"
-    suffix="$(normalize_prompt_text "${clause#*"$phrase"}")"
-
-    if is_manual_control_clause_explanatory "$prefix" || is_manual_control_clause_explanatory "$suffix"; then
-      continue
-    fi
-
-    if [ -n "$prefix" ]; then
-      if ! is_manual_control_clause_start "$prefix"; then
-        continue
-      fi
-    elif [ "$clause_index" -gt 0 ]; then
-      local prev_clause
-      prev_clause="${clauses[$((clause_index - 1))]}"
-      prev_clause="$(normalize_prompt_text "$prev_clause")"
-
-      if is_manual_control_clause_explanatory "$prev_clause"; then
-        continue
-      fi
-
-      if ! is_manual_control_clause_start "$prev_clause" && ! is_manual_control_clause_continuation "$prev_clause"; then
-        continue
-      fi
-    fi
-
-    if [ -n "$suffix" ]; then
-      if is_manual_control_clause_continuation "$suffix"; then
-        return 0
-      fi
-      continue
-    fi
-
-    if [ "$clause_index" -lt $((${#clauses[@]} - 1)) ]; then
-      local next_clause
-      next_clause="${clauses[$((clause_index + 1))]}"
-      next_clause="$(normalize_prompt_text "$next_clause")"
-      if is_manual_control_clause_continuation "$next_clause"; then
-        return 0
-      fi
-      continue
-    fi
-
-    return 0
-  done
-
-  return 1
-}
-
 PROMPT_NORMALIZED="$(normalize_prompt_text "$USER_PROMPT")"
 PROMPT_LC="$(printf '%s' "$PROMPT_NORMALIZED" | tr '[:upper:]' '[:lower:]')"
 NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
@@ -260,6 +126,26 @@ record_interrupt_if_requested() {
 is_interrupt_exact_command() {
   case "$1" in
     "停止任务"|"暂停任务"|"stop task"|"pause task")
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+is_manual_activate_exact_command() {
+  case "$1" in
+    "激活 superpowers enforcer"|"activate superpowers enforcer"|"开启 enforcer"|"enable enforcer")
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+is_manual_deactivate_exact_command() {
+  case "$1" in
+    "关闭 superpowers enforcer"|"deactivate superpowers enforcer"|"关闭 enforcer"|"disable enforcer")
       return 0
       ;;
   esac
@@ -288,14 +174,6 @@ emit_skip_block_json() {
     decision: "block",
     reason: ("检测到跳过流程请求。请先明确确认：确认跳过 " + $phase + "。确认后可选补充原因。")
   }'
-}
-
-is_manual_deactivate_prompt() {
-  matches_manual_control_phrase "关闭 superpowers enforcer" || matches_manual_control_phrase "deactivate superpowers enforcer" || matches_manual_control_phrase "关闭 enforcer" || matches_manual_control_phrase "disable enforcer"
-}
-
-is_manual_activate_prompt() {
-  matches_manual_control_phrase "激活 superpowers enforcer" || matches_manual_control_phrase "activate superpowers enforcer" || matches_manual_control_phrase "开启 enforcer" || matches_manual_control_phrase "enable enforcer"
 }
 
 confirmation_phase=""
@@ -330,7 +208,7 @@ elif echo "$PROMPT_LC" | grep -qE 'skip[[:space:]]+finishing|跳过[[:space:]]*f
   phase="finishing"
 fi
 
-if is_manual_deactivate_prompt; then
+if is_manual_deactivate_exact_command "$PROMPT_LC"; then
   jq --arg now "$NOW_UTC" '
     .workflow.active = false
     | .workflow.override = "manual_off"
@@ -347,7 +225,7 @@ if is_manual_deactivate_prompt; then
   exit 0
 fi
 
-if is_manual_activate_prompt; then
+if is_manual_activate_exact_command "$PROMPT_LC"; then
   jq --arg now "$NOW_UTC" '
     .workflow.active = true
     | .workflow.override = "manual_on"

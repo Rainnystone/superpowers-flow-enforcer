@@ -242,27 +242,33 @@ The reason is explicit product clarity: `停止` / `stop` already belong to the 
 
 ### Matching semantics
 
-The current normalized clause matching style should be preserved:
+Manual control should use the same simplicity rule as interrupt handling:
 
 1. trim outer whitespace
 2. collapse repeated internal whitespace
-3. allow polite or mid-sentence command clauses
-4. reject explanatory, hypothetical, quoted, or negated discussion of the command phrase
+3. lowercase English text
+4. require the entire normalized prompt to equal one supported manual-control command
+5. do not special-case polite prefixes, mid-sentence clauses, or explanatory discussion
 
 Representative accepted forms:
+
+1. `开启 enforcer`
+2. `enable enforcer`
+3. `关闭 superpowers enforcer`
+4. `DEACTIVATE   SUPERPOWERS   ENFORCER`
+
+Representative rejected forms:
 
 1. `请开启 enforcer`
 2. `先整理上下文，然后关闭 enforcer 再继续`
 3. `Please enable enforcer, thanks`
-
-Representative rejected forms:
-
-1. `如果用户输入 开启 enforcer 会发生什么？`
-2. `不是要关闭 enforcer，只是在解释命令`
+4. `disable enforcer and stop for now`
+5. `如果用户输入 开启 enforcer 会发生什么？`
+6. `不是要关闭 enforcer，只是在解释命令`
 
 ## B. Manual control takes priority over interrupt detection
 
-When a prompt contains a recognized enforcer control clause:
+When a prompt equals a recognized enforcer control command:
 
 1. process the enforcer control action first
 2. do **not** record `interrupt.allowed` from the same prompt
@@ -557,8 +563,8 @@ The implementation plan must include tests for at least the following behaviors.
 3. `关闭 enforcer` deactivates workflow
 4. `disable enforcer` deactivates workflow
 5. existing long phrases still work
-6. explanatory or negated uses of the short phrases do not mutate state
-7. matched enforcer-control prompts do not also write `interrupt.allowed`
+6. non-exact phrases such as `请开启 enforcer`, `Please enable enforcer, thanks`, or `disable enforcer and stop for now` do not mutate state
+7. matched enforcer-control commands do not also write `interrupt.allowed`
 8. only the exact interrupt commands `停止任务` / `暂停任务` / `stop task` / `pause task` set `interrupt.allowed`
 9. broader natural-language prompts such as `暂停，明天继续` or `Please stop after this step` do not set `interrupt.allowed`
 

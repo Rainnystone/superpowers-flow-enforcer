@@ -58,28 +58,28 @@
 
 插件不会对每个 Claude Code 会话强行激活 workflow。如果 workflow 从未激活，workflow-only 门禁会保持 inactive，不会阻断普通 Claude Code 工作。
 
-如果你不想依赖自动路径激活，也可以手动控制。本轮默认推荐的控制词是：
+如果你不想依赖自动路径激活，也可以手动控制。本轮只认这些精确命令，执行前会先做空白归一化：
 
 - `开启 enforcer`
 - `关闭 enforcer`
 - `enable enforcer`
 - `disable enforcer`
 
-为了兼容既有习惯和脚本，长命令仍然可用：
+为了兼容既有习惯和脚本，长命令仍然可用，但同样只认精确命令：
 
 - `激活 superpowers enforcer`
 - `关闭 superpowers enforcer`
 - `activate superpowers enforcer`
 - `deactivate superpowers enforcer`
 
-但本轮并不支持 `启动 enforcer`、`停止 enforcer`、`start enforcer`、`stop enforcer`。要关闭强制执行，请用 `关闭 enforcer` / `disable enforcer`，不要把 `stop` 理解成“关闭 enforcement”。
+像 `请开启 enforcer`、`Please enable enforcer, thanks`、`disable enforcer and stop for now` 这样的句子，本轮都不会触发开关。`启动 enforcer`、`停止 enforcer`、`start enforcer`、`stop enforcer` 也不支持。要关闭强制执行，请用 `关闭 enforcer` / `disable enforcer`，不要把 `stop` 理解成“关闭 enforcement”。
 
 ## Hook 系统
 
 | Hook 事件 | 匹配器 | 强制执行 |
 |-----------|--------|----------|
 | SessionStart | * | 初始化工作流状态 |
-| UserPromptSubmit | * | Bypass / 精确中断命令检测 + 缺失状态自举 |
+| UserPromptSubmit | * | Bypass / 精确开关命令检测 / 精确中断命令检测 + 缺失状态自举 |
 | PreToolUse | Edit\|Write | workflow-aware 写入门禁 + TDD 铁律 |
 | PreToolUse | AskUserQuestion | 仅在 workflow 激活时要求更新 Brainstorming findings |
 | PreToolUse | Agent | 仅针对 superpowers packetized execution 的 task-boundary 门禁 + reviewer 角色约束 |

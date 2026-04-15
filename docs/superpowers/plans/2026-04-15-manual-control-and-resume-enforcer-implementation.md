@@ -183,7 +183,7 @@ git commit -m "fix: add resume recovery state schema"
 
 ## Task 2: Add Short Manual Control Phrases And Interrupt Priority
 
-**User-facing goal:** Users can control enforcement with `开启/关闭 enforcer` and `enable/disable enforcer`, and interrupt intent is reduced to a small exact-command whitelist instead of broad natural-language guessing.
+**User-facing goal:** Users can control enforcement with a small exact-command whitelist (`开启/关闭 enforcer`, `enable/disable enforcer`, plus the existing long-form commands), and interrupt intent is reduced to a small exact-command whitelist instead of broad natural-language guessing.
 
 **Files:**
 - Modify: `scripts/sync-user-prompt-state.sh`
@@ -194,10 +194,12 @@ git commit -m "fix: add resume recovery state schema"
 
 Extend `tests/test_bypass_state.sh` with accepted prompt cases for:
 
-1. `请开启 enforcer`
-2. `先整理上下文，然后关闭 enforcer 再继续`
-3. `Please enable enforcer, thanks`
-4. `disable enforcer and stop for now`
+1. `开启 enforcer`
+2. `关闭 enforcer`
+3. `enable enforcer`
+4. `disable enforcer`
+
+Keep the existing long-form command cases so backward compatibility remains covered.
 
 Extend the interrupt coverage so only these exact prompts are positive:
 
@@ -208,9 +210,13 @@ Extend the interrupt coverage so only these exact prompts are positive:
 
 And make representative former broad prompts explicit negatives, such as:
 
-1. `暂停，明天继续`
-2. `Please stop for now`
-3. `Please stop after this step`
+1. `请开启 enforcer`
+2. `先整理上下文，然后关闭 enforcer 再继续`
+3. `Please enable enforcer, thanks`
+4. `disable enforcer and stop for now`
+5. `暂停，明天继续`
+6. `Please stop for now`
+7. `Please stop after this step`
 
 For the control prompts, assert:
 
@@ -228,8 +234,6 @@ assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 ```
 
-Keep the existing long-form command cases so backward compatibility remains covered.
-
 - [ ] **Step 2: Run the test to verify RED**
 
 Run:
@@ -238,7 +242,7 @@ Run:
 bash tests/test_bypass_state.sh
 ```
 
-Expected: FAIL because the script does not yet match the short enforcer phrases and still uses broader interrupt detection than the new explicit-command contract allows.
+Expected: FAIL because the script still accepts broader clause-style enforcer prompts and still uses broader interrupt detection than the new exact-command contract allows.
 
 - [ ] **Step 3: Write the minimal implementation**
 
@@ -262,9 +266,10 @@ Update `scripts/sync-user-prompt-state.sh` so:
 "disable enforcer"
 ```
 
-3. recognized enforcer-control prompts are processed before `record_interrupt_if_requested`
-4. once a control clause matches, the script exits without writing `interrupt.allowed` from the same prompt
-5. interrupt recording is reduced to the exact normalized prompts:
+3. after normalization, the prompt must equal one of the supported commands; do not keep clause parsing, explanatory heuristics, or partial phrase matching
+4. recognized enforcer-control commands are processed before `record_interrupt_if_requested`
+5. once a control command matches, the script exits without writing `interrupt.allowed` from the same prompt
+6. interrupt recording is reduced to the exact normalized prompts:
 
 ```bash
 "停止任务"
@@ -273,8 +278,8 @@ Update `scripts/sync-user-prompt-state.sh` so:
 "pause task"
 ```
 
-6. broader natural-language stop/pause prompts no longer set `interrupt.allowed`
-7. explanatory / quoted / negated prompt rejection for enforcer control stays intact
+7. broader natural-language stop/pause prompts no longer set `interrupt.allowed`
+8. former clause-style manual-control prompts such as `Please enable enforcer, thanks` or `disable enforcer and stop for now` no longer mutate state
 
 - [ ] **Step 4: Run the test to verify GREEN**
 
@@ -699,12 +704,13 @@ In all three docs, update the command guidance so:
    - `关闭 enforcer`
    - `enable enforcer`
    - `disable enforcer`
-2. long-form compatibility is still documented
-3. `启动/停止 enforcer` and `start/stop enforcer` are explicitly not the recommended control surface this round
-4. `stop` / `暂停` remain interrupt vocabulary, not enforcer shutdown vocabulary
-5. resumed unfinished workflows must run `/superpowers-flow-enforcer:resume-enforcer` before new edits or agent dispatch
-6. state tracking now includes `resume.recovery_required`, `resume.recovery_completed_at`, and `resume.last_resume_source`
-7. the repo-specific planning records for recovery live under `.planning-with-files/`
+2. all manual-control commands are described as exact commands after whitespace normalization
+3. long-form compatibility is still documented
+4. `启动/停止 enforcer` and `start/stop enforcer` are explicitly not supported this round
+5. `stop` / `暂停` remain interrupt vocabulary, not enforcer shutdown vocabulary
+6. resumed unfinished workflows must run `/superpowers-flow-enforcer:resume-enforcer` before new edits or agent dispatch
+7. state tracking now includes `resume.recovery_required`, `resume.recovery_completed_at`, and `resume.last_resume_source`
+8. the repo-specific planning records for recovery live under `.planning-with-files/`
 
 - [ ] **Step 2: Verify the docs mention the new runtime surface**
 
