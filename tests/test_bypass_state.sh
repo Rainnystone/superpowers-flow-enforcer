@@ -691,6 +691,20 @@ assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
 
+SAME_CLAUSE_EXPLAIN_THEN_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain \\\"stop\\\" semantics and then stop for now"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$SAME_CLAUSE_EXPLAIN_THEN_STOP_OUTPUT" ]; then
+  echo "Expected same-clause explain-then-stop prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please explain \"stop\" semantics and then stop for now"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
+
 MIXED_EXPLAIN_THEN_PAUSE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain \\\"stop\\\" semantics, then pause for now"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
@@ -715,6 +729,20 @@ if [ -n "$MIXED_DO_NOT_STOP_THEN_STOP_OUTPUT" ]; then
 fi
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please do not stop yet, stop after this step"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
+
+SAME_CLAUSE_DO_NOT_STOP_THEN_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please do not stop yet and then stop after this step"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$SAME_CLAUSE_DO_NOT_STOP_THEN_STOP_OUTPUT" ]; then
+  echo "Expected same-clause negation-then-stop prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please do not stop yet and then stop after this step"'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"

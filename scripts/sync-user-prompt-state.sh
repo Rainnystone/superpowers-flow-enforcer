@@ -261,24 +261,21 @@ is_interrupt_clause_trigger() {
     return 0
   fi
 
-  if echo "$clause" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)' && ! is_interrupt_stop_discussion_prompt "$clause"; then
+  if is_interrupt_stop_pause_clause "$clause"; then
     return 0
   fi
 
   return 1
 }
 
-is_interrupt_stop_discussion_prompt() {
-  local clause="$1"
-  local prefix
-  local suffix
+is_interrupt_stop_discussion_context() {
+  local prefix="$1"
+  local suffix="$2"
+  local local_context="${prefix}stop${suffix}"
 
-  if echo "$clause" | grep -qE '["'"'"'`][[:space:]]*stop[[:space:]]*["'"'"'`]' ; then
+  if echo "$local_context" | grep -qE '["'"'"'`][[:space:]]*stop[[:space:]]*["'"'"'`]' ; then
     return 0
   fi
-
-  prefix="$(normalize_prompt_text "${clause%%stop*}")"
-  suffix="$(normalize_prompt_text "${clause#*stop}")"
 
   if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(do[[:space:]]+not|don.?t|dont|不要|别)([[:space:][:punct:]]|$)'; then
     return 0
@@ -297,6 +294,67 @@ is_interrupt_stop_discussion_prompt() {
   fi
 
   return 1
+}
+
+trim_interrupt_stop_context_prefix() {
+  local text="$1"
+  local trimmed
+
+  trimmed="$(normalize_prompt_text "$text")"
+  case "$trimmed" in
+    *" and then "*) trimmed="${trimmed##* and then }" ;;
+    *" then "*) trimmed="${trimmed##* then }" ;;
+    *" and continue "*) trimmed="${trimmed##* and continue }" ;;
+    *" and return "*) trimmed="${trimmed##* and return }" ;;
+    *" and stop for now "*) trimmed="${trimmed##* and stop for now }" ;;
+    *" and "*) trimmed="${trimmed##* and }" ;;
+    *" 再 "*) trimmed="${trimmed##* 再 }" ;;
+    *" 然后 "*) trimmed="${trimmed##* 然后 }" ;;
+    *" 接着 "*) trimmed="${trimmed##* 接着 }" ;;
+    *" 随后 "*) trimmed="${trimmed##* 随后 }" ;;
+  esac
+
+  normalize_prompt_text "$trimmed"
+}
+
+is_interrupt_stop_pause_clause() {
+  local remainder="$1"
+  local match_info
+  local match_offset
+  local matched_text
+  local match_end
+  local prefix_before_match
+  local leading
+  local trailing
+  local after_match
+  local prefix
+  local local_prefix
+  local suffix
+
+  while :; do
+    match_info="$(printf '%s' "$remainder" | grep -b -oE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)' | head -n1 || true)"
+    if [ -z "$match_info" ]; then
+      return 1
+    fi
+
+    match_offset="${match_info%%:*}"
+    matched_text="${match_info#*:}"
+    match_end=$((match_offset + ${#matched_text}))
+    prefix_before_match="${remainder:0:match_offset}"
+    leading="${matched_text%%stop*}"
+    trailing="${matched_text#*stop}"
+    after_match="${remainder:match_end}"
+    prefix="${prefix_before_match}${leading}"
+    suffix="${trailing}${after_match}"
+    local_prefix="$(trim_interrupt_stop_context_prefix "$prefix")"
+
+    if is_interrupt_stop_discussion_context "$local_prefix" "$suffix"; then
+      remainder="$after_match"
+      continue
+    fi
+
+    return 0
+  done
 }
 
 normalize_confirmation_phase() {
