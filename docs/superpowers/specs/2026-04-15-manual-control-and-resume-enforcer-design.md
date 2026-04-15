@@ -410,11 +410,11 @@ This round pins the skill to a concrete repo boundary:
 1. primary skill file: `skills/resume-enforcer/SKILL.md`
 2. explicit resume-state recording helper: `scripts/record-resume-state.sh`
 
-For this plugin packaging model, the user-facing installed invocation should be documented as:
+This round explicitly ships the recovery skill as a real plugin-bundled skill from the boundary above. For this plugin packaging model, the user-facing installed invocation should be documented as:
 
 1. `/superpowers-flow-enforcer:resume-enforcer`
 
-Within this design document, `resume-enforcer` may still be used as shorthand for the skill itself. The implementation plan must plan against the concrete file boundary above and the fully qualified installed invocation surface above.
+Within this design document, `resume-enforcer` may still be used as shorthand for the skill itself. There is no additional alias in this round. The implementation plan must plan against the concrete file boundary above and the fully qualified installed invocation surface above.
 
 ### Canonical planning-record location for this round
 
@@ -459,6 +459,14 @@ The skill must **not**:
 5. bypass the recovery gate without actually completing the recovery procedure
 
 ### Recovery completion
+
+A recovery run counts as successful when all of the following are true:
+
+1. the skill completed its required reads
+2. the skill emitted the structured recovery summary
+3. the explicit resume-state recording helper completed successfully
+
+This success condition does **not** require Claude to complete later follow-up repairs or workflow actions. Recovery success means "the workflow position has been reconstructed and recorded," not "the unfinished workflow is now fully solved."
 
 At the end of a successful recovery run, the skill must record:
 
