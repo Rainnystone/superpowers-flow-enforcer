@@ -235,11 +235,34 @@ NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
 
 record_interrupt_if_requested() {
-  if echo "$PROMPT_LC" | grep -qE '停止|pause|暂停|明天继续|稍后继续|休息一下|break' || \
-    echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop($|[[:punct:]])|(^|[^[:alpha:]])stop[[:space:]]+(for[[:space:]]+now|here|please|now)([[:punct:]]|$)'; then
+  if echo "$PROMPT_LC" | grep -qE '停止|pause|暂停|明天继续|稍后继续|休息一下|break' || is_interrupt_stop_prompt; then
     jq --arg reason "$USER_PROMPT" '.interrupt.allowed = true | .interrupt.reason = $reason | del(.interrupt.keywords_detected)' "$STATE_FILE" > "$tmp_file"
     mv "$tmp_file" "$STATE_FILE"
   fi
+}
+
+is_interrupt_stop_prompt() {
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+here([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+now([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+for[[:space:]]+now([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop[[:space:]]+here[[:space:]]+and[[:space:]]+continue[[:space:]]+tomorrow([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  return 1
 }
 
 normalize_confirmation_phase() {

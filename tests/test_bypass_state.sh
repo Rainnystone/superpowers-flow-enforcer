@@ -564,6 +564,20 @@ assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop for now"'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
+
+POSITIVE_STOP_HERE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop here and continue tomorrow"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$POSITIVE_STOP_HERE_OUTPUT" ]; then
+  echo "Expected stop here pause prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop here and continue tomorrow"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
 jq '.interrupt.allowed = true | .interrupt.reason = "stale interrupt" | .interrupt.keywords_detected = ["legacy keyword"]' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
 
