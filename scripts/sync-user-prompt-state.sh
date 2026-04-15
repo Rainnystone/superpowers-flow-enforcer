@@ -338,6 +338,10 @@ is_interrupt_stop_discussion_context() {
     return 0
   fi
 
+  if echo "$suffix" | grep -qE '^[[:space:]]*(semantics|meaning|definition|describe|discussion|example|examples|usage|meaningful|interpret|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)|^[[:space:]]*for[[:space:]]+now[[:space:]]+(semantics|meaning|definition|describe|discussion|example|examples|usage|meaningful|interpret|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
   if echo "$prefix" | grep -qE '(^|[^[:alpha:]])if[[:space:]]+i[[:space:]]+write([[:space:][:punct:]]|$)|(^|[^[:alpha:]])what[[:space:]]+happens[[:space:]]+if[[:space:]]+i[[:space:]]+say([[:space:][:punct:]]|$)'; then
     return 0
   fi
@@ -475,6 +479,8 @@ if is_manual_deactivate_prompt; then
     | .workflow.override = "manual_off"
     | .workflow.deactivated_by = "manual_prompt"
     | .workflow.deactivated_at = $now
+    | .workflow.activated_by = null
+    | .workflow.activated_at = null
     | .interrupt.allowed = false
     | .interrupt.reason = null
     | .interrupt.keywords_detected = []

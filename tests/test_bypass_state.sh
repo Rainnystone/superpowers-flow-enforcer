@@ -858,21 +858,61 @@ assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
-jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt"' "$STATE_FILE" > "$STATE_FILE.tmp"
+jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt" | .workflow.activated_at = "2026-04-15T00:00:00Z"' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
 
-NEGATIVE_MANUAL_CONTROL_SEMANTICS_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please disable enforcer stop for now semantics"}' "$MANUAL_PROMPT_PROJECT" \
+NEGATIVE_EXPLAIN_DISABLE_STOP_SEMANTICS_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain disable enforcer, stop semantics"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-if [ -n "$NEGATIVE_MANUAL_CONTROL_SEMANTICS_OUTPUT" ]; then
-  echo "Expected manual-control discussion prompt to be silent allow" >&2
+if [ -n "$NEGATIVE_EXPLAIN_DISABLE_STOP_SEMANTICS_OUTPUT" ]; then
+  echo "Expected explanatory disable-enforcer stop prompt to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
-assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_at' '"2026-04-15T00:00:00Z"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt" | .workflow.activated_at = "2026-04-15T00:00:00Z"' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+NEGATIVE_DISABLE_STOP_SEMANTICS_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please disable enforcer: stop for now semantics"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_DISABLE_STOP_SEMANTICS_OUTPUT" ]; then
+  echo "Expected disable-enforcer stop semantics prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_at' '"2026-04-15T00:00:00Z"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt" | .workflow.activated_at = "2026-04-15T00:00:00Z"' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+NEGATIVE_EXPLAIN_DISABLE_STOP_SEMICOLON_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain disable enforcer; stop semantics"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_EXPLAIN_DISABLE_STOP_SEMICOLON_OUTPUT" ]; then
+  echo "Expected explanatory disable-enforcer stop prompt with semicolon to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_at' '"2026-04-15T00:00:00Z"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
@@ -909,6 +949,8 @@ if [ -n "$DISABLE_CLEARS_STALE_INTERRUPT_OUTPUT" ]; then
 fi
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
 assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.activated_at' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
