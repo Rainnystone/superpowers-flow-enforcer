@@ -338,7 +338,7 @@ is_interrupt_stop_discussion_context() {
     return 0
   fi
 
-  if echo "$suffix" | grep -qE '^[[:space:]]*(semantics|meaning|definition|describe|discussion|example|examples|usage|meaningful|interpret|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)|^[[:space:]]*for[[:space:]]+now[[:space:]]+(semantics|meaning|definition|describe|discussion|example|examples|usage|meaningful|interpret|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)'; then
+  if echo "$suffix" | grep -qE '^[[:space:]]*semantics([[:space:][:punct:]]*)$|^[[:space:]]*for[[:space:]]+now[[:space:]]+semantics([[:space:][:punct:]]*)$'; then
     return 0
   fi
 
