@@ -256,6 +256,20 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 allow_output="$(run_agent_gate 'Implement without metadata prefix.')"
 assert_pretool_allow "$allow_output"
 
+write_v2_state "$STATE_FILE"
+jq '
+  .workflow.active = true
+  | .resume.recovery_required = true
+  | .worktree.created = true
+  | .worktree.baseline_verified = true
+  | .task_flow.active_task_id = "task-recovery-open"
+  | .review.tasks["task-recovery-open"] = {spec_review_passed:false, code_review_passed:false}
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+deny_output="$(run_agent_gate 'Implement without metadata prefix.')"
+assert_pretool_deny "$deny_output" '/superpowers-flow-enforcer:resume-enforcer'
+
+write_v2_state "$STATE_FILE"
 jq '
   .workflow.active = true
   | .worktree.created = true

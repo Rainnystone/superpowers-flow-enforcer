@@ -311,6 +311,13 @@ if [ "$TOOL_NAME" = "AskUserQuestion" ]; then
   exit 0
 fi
 
+if state_is_true '.resume.recovery_required'; then
+  if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Agent" ]; then
+    deny_pretool "检测到 resumed 的未完成 superpowers workflow。先执行 /superpowers-flow-enforcer:resume-enforcer 完成恢复摘要，再继续 Edit/Write/Agent。"
+    exit 0
+  fi
+fi
+
 if [ "$TOOL_NAME" = "Agent" ]; then
   if ! task_boundary_agent_gate_active; then
     exit 0

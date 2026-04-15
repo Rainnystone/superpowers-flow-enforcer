@@ -73,6 +73,14 @@ run_ask_gate() {
   }' | bash scripts/check-pretool-gates.sh
 }
 
+run_bash_gate() {
+  jq -n '{
+    hook_event_name:"PreToolUse",
+    tool_name:"Bash",
+    tool_input:{command:"echo still allowed during recovery"}
+  }' | bash scripts/check-pretool-gates.sh
+}
+
 write_v2_state "$STATE_FILE"
 
 deny_output="$(run_write_gate '.claude/flow_state.json')"
@@ -372,6 +380,29 @@ assert_pretool_allow "$allow_output"
 
 write_v2_state "$STATE_FILE"
 allow_output="$(run_ask_gate)"
+assert_pretool_allow "$allow_output"
+
+write_v2_state "$STATE_FILE"
+jq '
+  .workflow.active = true
+  | .resume.recovery_required = true
+  | .brainstorming.spec_written = true
+  | .worktree.created = true
+  | .worktree.baseline_verified = true
+  | .tdd.pending_failure_record = true
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+
+deny_output="$(run_write_gate 'src/resume-write.ts')"
+assert_pretool_deny "$deny_output" '/superpowers-flow-enforcer:resume-enforcer'
+
+deny_output="$(run_edit_gate_with_path 'src/resume-edit.ts')"
+assert_pretool_deny "$deny_output" '/superpowers-flow-enforcer:resume-enforcer'
+
+allow_output="$(run_ask_gate)"
+assert_pretool_allow "$allow_output"
+
+allow_output="$(run_bash_gate)"
 assert_pretool_allow "$allow_output"
 
 write_v2_state "$STATE_FILE"
