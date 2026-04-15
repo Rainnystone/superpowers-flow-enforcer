@@ -789,6 +789,20 @@ assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
+NEGATIVE_IF_I_SAY_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"If I say stop after this step, what happens?"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_IF_I_SAY_STOP_OUTPUT" ]; then
+  echo "Expected if-I-say-stop discussion prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+
 NEGATIVE_DO_NOT_STOP_YET_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please do not stop yet"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
@@ -839,6 +853,26 @@ if [ -n "$NEGATIVE_IF_WRITE_STOP_OUTPUT" ]; then
   echo "Expected conditional stop discussion prompt to be silent allow" >&2
   exit 1
 fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt"' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+NEGATIVE_MANUAL_CONTROL_SEMANTICS_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please disable enforcer stop for now semantics"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_MANUAL_CONTROL_SEMANTICS_OUTPUT" ]; then
+  echo "Expected manual-control discussion prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'

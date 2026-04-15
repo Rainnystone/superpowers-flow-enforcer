@@ -138,8 +138,24 @@ is_manual_control_clause_start() {
 }
 
 is_manual_control_clause_continuation() {
-  case "$1" in
-    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|and\ stop\ for\ now*|stop\ for\ now*|please*)
+  local text
+  local tail
+
+  text="$(normalize_prompt_text "$1")"
+
+  case "$text" in
+    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|please*)
+      return 0
+      ;;
+  esac
+
+  case "$text" in
+    and\ stop\ for\ now*|stop\ for\ now*)
+      tail="${text#*stop for now}"
+      tail="$(normalize_prompt_text "$tail")"
+      if [ -n "$tail" ] && is_manual_control_clause_explanatory "$tail"; then
+        return 1
+      fi
       return 0
       ;;
   esac
@@ -149,7 +165,7 @@ is_manual_control_clause_continuation() {
 
 is_manual_control_clause_explanatory() {
   case "$1" in
-    *不要*|*别*|*不是*|*如果*|*假如*|*说明*|*解释*|*含义*|*意思*|*例子*|*举例*|*比如*|*例如*|*会做什么*|*什么意思*|*do\ not*|*don\'t*|*not*|*if*|*suppose*|*explain*|*meaning*|*example*|*for\ example*|*what\ will*|*what\ does*|*what\ happens*|*what\ would*)
+    *不要*|*别*|*不是*|*如果*|*假如*|*说明*|*解释*|*含义*|*意思*|*语义*|*semantics*|*例子*|*举例*|*比如*|*例如*|*会做什么*|*什么意思*|*do\ not*|*don\'t*|*not*|*if*|*suppose*|*explain*|*meaning*|*example*|*for\ example*|*what\ will*|*what\ does*|*what\ happens*|*what\ would*)
       return 0
       ;;
   esac
@@ -245,13 +261,38 @@ record_interrupt_if_requested() {
     fi
   done < <(split_manual_control_clauses "$PROMPT_LC")
 
-  for clause in "${clauses[@]}"; do
+  local clause_index
+  for clause_index in "${!clauses[@]}"; do
+    clause="${clauses[$clause_index]}"
+    if [ "$clause_index" -lt $((${#clauses[@]} - 1)) ]; then
+      local next_clause
+      next_clause="${clauses[$((clause_index + 1))]}"
+      if is_interrupt_stop_discussion_followup_clause "$clause" "$next_clause"; then
+        continue
+      fi
+    fi
+
     if is_interrupt_clause_trigger "$clause"; then
       jq --arg reason "$USER_PROMPT" '.interrupt.allowed = true | .interrupt.reason = $reason | del(.interrupt.keywords_detected)' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
       return
     fi
   done
+}
+
+is_interrupt_stop_discussion_followup_clause() {
+  local clause="$1"
+  local next_clause="$2"
+
+  if [ -z "$next_clause" ]; then
+    return 1
+  fi
+
+  if echo "$clause" | grep -qE '(^|[^[:alpha:]])if[[:space:]]+i[[:space:]]+say([[:space:][:punct:]]|$)' && echo "$next_clause" | grep -qE '^(what[[:space:]]+happens|what[[:space:]]+will[[:space:]]+happen|what[[:space:]]+would[[:space:]]+happen)([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  return 1
 }
 
 is_interrupt_clause_trigger() {
@@ -282,6 +323,14 @@ is_interrupt_stop_discussion_context() {
   fi
 
   if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+happens|what[[:space:]]+if|what[[:space:]]+does|what[[:space:]]+is|how[[:space:]]+does|how[[:space:]]+about|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(disable|enable)[[:space:]]+enforcer([[:space:][:punct:]]|$)' && echo "$suffix" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+happens|what[[:space:]]+if|what[[:space:]]+does|what[[:space:]]+is|how[[:space:]]+does|how[[:space:]]+about|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$prefix" | grep -qE '(^|[^[:alpha:]])if[[:space:]]+i[[:space:]]+say([[:space:][:punct:]]|$)' && echo "$suffix" | grep -qE '(^|[^[:alpha:]])what[[:space:]]+happens([[:space:][:punct:]]|$)|(^|[^[:alpha:]])what[[:space:]]+will[[:space:]]+happen([[:space:][:punct:]]|$)|(^|[^[:alpha:]])what[[:space:]]+would[[:space:]]+happen([[:space:][:punct:]]|$)'; then
     return 0
   fi
 
