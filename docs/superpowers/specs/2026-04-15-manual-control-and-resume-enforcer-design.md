@@ -425,6 +425,7 @@ For this round that means:
 1. the implementation must add `skills/resume-enforcer/SKILL.md` at plugin root
 2. no extra skill registry or manifest enumeration is required in `manifest.json` or `.claude-plugin/plugin.json`
 3. the namespaced slash invocation comes from the plugin packaging model itself, not from a separate alias layer
+4. repo-side wiring is therefore: ship `skills/resume-enforcer/SKILL.md` inside this repository’s plugin bundle, which is loaded via the existing plugin package metadata, and Claude Code resolves the runtime command surface as `/superpowers-flow-enforcer:resume-enforcer`
 
 ### Canonical planning-record location for this round
 
