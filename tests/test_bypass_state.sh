@@ -664,7 +664,7 @@ assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 write_v2_state "$STATE_FILE"
 
 NEGATIVE_QUOTED_STOP_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain \"stop\" semantics"}' "$MANUAL_PROMPT_PROJECT" \
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain \\\"stop\\\" semantics"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
 if [ -n "$NEGATIVE_QUOTED_STOP_OUTPUT" ]; then
@@ -674,6 +674,48 @@ fi
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+
+MIXED_EXPLAIN_THEN_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain \\\"stop\\\" semantics, then stop for now"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$MIXED_EXPLAIN_THEN_STOP_OUTPUT" ]; then
+  echo "Expected mixed explain-then-stop prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please explain \"stop\" semantics, then stop for now"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
+
+MIXED_EXPLAIN_THEN_PAUSE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain \\\"stop\\\" semantics, then pause for now"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$MIXED_EXPLAIN_THEN_PAUSE_OUTPUT" ]; then
+  echo "Expected mixed explain-then-pause prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please explain \"stop\" semantics, then pause for now"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+
+write_v2_state "$STATE_FILE"
+
+MIXED_DO_NOT_STOP_THEN_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please do not stop yet, stop after this step"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$MIXED_DO_NOT_STOP_THEN_STOP_OUTPUT" ]; then
+  echo "Expected mixed negation-then-stop prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please do not stop yet, stop after this step"'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
 

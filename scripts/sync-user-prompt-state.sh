@@ -235,17 +235,6 @@ NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
 
 record_interrupt_if_requested() {
-  if is_interrupt_stop_discussion_prompt; then
-    return
-  fi
-
-  if echo "$PROMPT_LC" | grep -qE '停止|pause|暂停|明天继续|稍后继续|休息一下|break' || is_interrupt_stop_prompt; then
-    jq --arg reason "$USER_PROMPT" '.interrupt.allowed = true | .interrupt.reason = $reason | del(.interrupt.keywords_detected)' "$STATE_FILE" > "$tmp_file"
-    mv "$tmp_file" "$STATE_FILE"
-  fi
-}
-
-is_interrupt_stop_discussion_prompt() {
   local clauses=()
   local clause
 
@@ -256,45 +245,54 @@ is_interrupt_stop_discussion_prompt() {
     fi
   done < <(split_manual_control_clauses "$PROMPT_LC")
 
-  local clause_index
-  for clause_index in "${!clauses[@]}"; do
-    clause="${clauses[$clause_index]}"
-
-    if ! echo "$clause" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
-      continue
-    fi
-
-    if echo "$clause" | grep -qE '["'"'"'`][[:space:]]*stop[[:space:]]*["'"'"'`]' ; then
-      return 0
-    fi
-
-    local prefix
-    local suffix
-    prefix="$(normalize_prompt_text "${clause%%stop*}")"
-    suffix="$(normalize_prompt_text "${clause#*stop}")"
-
-    if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(do[[:space:]]+not|don.?t|dont|不要|别)([[:space:][:punct:]]|$)'; then
-      return 0
-    fi
-
-    if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+happens|what[[:space:]]+if|what[[:space:]]+does|what[[:space:]]+is|how[[:space:]]+does|how[[:space:]]+about|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)'; then
-      return 0
-    fi
-
-    if echo "$suffix" | grep -qE '^[[:space:]]*(是[[:space:]]*什么[[:space:]]*意思|的[[:space:]]*(含义|意思))([[:space:][:punct:]]|$)'; then
-      return 0
-    fi
-
-    if echo "$prefix" | grep -qE '(^|[^[:alpha:]])if[[:space:]]+i[[:space:]]+write([[:space:][:punct:]]|$)|(^|[^[:alpha:]])what[[:space:]]+happens[[:space:]]+if[[:space:]]+i[[:space:]]+say([[:space:][:punct:]]|$)'; then
-      return 0
+  for clause in "${clauses[@]}"; do
+    if is_interrupt_clause_trigger "$clause"; then
+      jq --arg reason "$USER_PROMPT" '.interrupt.allowed = true | .interrupt.reason = $reason | del(.interrupt.keywords_detected)' "$STATE_FILE" > "$tmp_file"
+      mv "$tmp_file" "$STATE_FILE"
+      return
     fi
   done
+}
+
+is_interrupt_clause_trigger() {
+  local clause="$1"
+
+  if echo "$clause" | grep -qE '停止|pause|暂停|明天继续|稍后继续|休息一下|break'; then
+    return 0
+  fi
+
+  if echo "$clause" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)' && ! is_interrupt_stop_discussion_prompt "$clause"; then
+    return 0
+  fi
 
   return 1
 }
 
-is_interrupt_stop_prompt() {
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
+is_interrupt_stop_discussion_prompt() {
+  local clause="$1"
+  local prefix
+  local suffix
+
+  if echo "$clause" | grep -qE '["'"'"'`][[:space:]]*stop[[:space:]]*["'"'"'`]' ; then
+    return 0
+  fi
+
+  prefix="$(normalize_prompt_text "${clause%%stop*}")"
+  suffix="$(normalize_prompt_text "${clause#*stop}")"
+
+  if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(do[[:space:]]+not|don.?t|dont|不要|别)([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+happens|what[[:space:]]+if|what[[:space:]]+does|what[[:space:]]+is|how[[:space:]]+does|how[[:space:]]+about|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$suffix" | grep -qE '^[[:space:]]*(是[[:space:]]*什么[[:space:]]*意思|的[[:space:]]*(含义|意思))([[:space:][:punct:]]|$)'; then
+    return 0
+  fi
+
+  if echo "$prefix" | grep -qE '(^|[^[:alpha:]])if[[:space:]]+i[[:space:]]+write([[:space:][:punct:]]|$)|(^|[^[:alpha:]])what[[:space:]]+happens[[:space:]]+if[[:space:]]+i[[:space:]]+say([[:space:][:punct:]]|$)'; then
     return 0
   fi
 
