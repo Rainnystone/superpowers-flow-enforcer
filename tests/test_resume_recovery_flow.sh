@@ -17,11 +17,11 @@ assert_command_fails() {
   fi
 }
 
-assert_json_is_non_empty_string() {
+assert_json_matches_utc_iso8601() {
   local file="$1" jq_expr="$2"
 
-  if ! jq -e "$jq_expr | type == \"string\" and length > 0" "$file" >/dev/null; then
-    echo "Expected $jq_expr to be a non-empty string" >&2
+  if ! jq -e "$jq_expr | type == \"string\" and test(\"^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$\")" "$file" >/dev/null; then
+    echo "Expected $jq_expr to be a UTC ISO-8601 timestamp" >&2
     exit 1
   fi
 }
@@ -61,6 +61,14 @@ mv "$STATE_FILE.tmp" "$STATE_FILE"
 assert_command_fails "missing arguments" bash scripts/record-resume-state.sh
 assert_command_fails "missing source argument" bash scripts/record-resume-state.sh completed
 assert_command_fails "unsupported action" bash scripts/record-resume-state.sh pending resume
+bash scripts/update-state.sh --jq '.resume.recovery_required = false | .resume.recovery_completed_at = null | .resume.last_resume_source = null' >/dev/null
+before_no_recovery="$(cat "$STATE_FILE")"
+assert_command_fails "recovery not required" bash scripts/record-resume-state.sh completed resume
+after_no_recovery="$(cat "$STATE_FILE")"
+if [ "$before_no_recovery" != "$after_no_recovery" ]; then
+  echo "Expected state to remain unchanged when recovery is not required" >&2
+  exit 1
+fi
 
 assert_file_exists "$SKILL_FILE"
 assert_file_contains_all "$SKILL_FILE" \
@@ -74,10 +82,11 @@ assert_file_contains_all "$SKILL_FILE" \
   "open task / review state" \
   "last confirmed progress point" \
   "next required action" \
-  'bash ${CLAUDE_PLUGIN_ROOT}/scripts/record-resume-state.sh completed resume'
+  'bash scripts/record-resume-state.sh completed resume'
 
+bash scripts/update-state.sh --jq '.resume.recovery_required = true | .resume.recovery_completed_at = null | .resume.last_resume_source = "resume"' >/dev/null
 bash scripts/record-resume-state.sh completed resume
 
 assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
 assert_json_equals "$STATE_FILE" '.resume.last_resume_source' '"resume"'
-assert_json_is_non_empty_string "$STATE_FILE" '.resume.recovery_completed_at'
+assert_json_matches_utc_iso8601 "$STATE_FILE" '.resume.recovery_completed_at'

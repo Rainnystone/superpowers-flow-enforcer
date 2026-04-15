@@ -15,6 +15,6 @@ Use this manual recovery flow when a resumed superpowers workflow is blocked unt
    - open task / review state
    - last confirmed progress point
    - next required action
-8. After the summary is complete, run `bash ${CLAUDE_PLUGIN_ROOT}/scripts/record-resume-state.sh completed resume`.
+8. After the summary is complete, run `bash scripts/record-resume-state.sh completed resume`.
 
 Do not clear the recovery gate before the structured summary has been explicitly recorded.
