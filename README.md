@@ -35,6 +35,8 @@ For the intended workflow, keep these three pieces together:
    /reload-plugins
    ```
 
+   If you install this plugin from a third-party marketplace instead, the entry you see under `/plugin` still comes from this repo's `.claude-plugin/plugin.json` inside the installed plugin package. That file is the official Claude Code plugin manifest; the root `manifest.json` in this repo is not.
+
    **Alternative: Temporary loading for development/testing**
    ```
    claude --plugin-dir /absolute/path/to/superpowers-flow-enforcer
@@ -185,7 +187,10 @@ When claiming completion ("done", "tests pass", "fixed"):
 ## Files
 
 ```
-manifest.json          # Plugin metadata
+.claude-plugin/
+├── plugin.json        # Official Claude Code plugin manifest used by /plugin
+└── marketplace.json   # Local/test marketplace catalog for this repository
+manifest.json          # Legacy repo metadata; not used as the Claude Code plugin manifest
 CLAUDE.md              # Plugin instructions for Claude
 README.md              # English docs
 README_cn.md           # Chinese docs
@@ -243,6 +248,8 @@ The plugin references these superpowers skills:
 ## Troubleshooting
 
 **Hook not firing**: Run `/plugin` and check the Installed/Errors tabs, then run `/reload-plugins`.
+
+**Plugin visible but metadata looks wrong**: Check `.claude-plugin/plugin.json` first. That is the official manifest Claude Code uses for plugin identity in `/plugin`. `manifest.json` at the repo root is not the Claude Code plugin manifest.
 
 **Blocked unexpectedly**: Check state file for current phase status. May need to complete earlier phase.
 

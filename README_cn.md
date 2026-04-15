@@ -35,6 +35,8 @@
    /reload-plugins
    ```
 
+   如果你是通过三方 marketplace 安装，这个插件在 `/plugin` 里显示出来的身份信息，仍然来自插件包内的 `.claude-plugin/plugin.json`。那才是 Claude Code 官方识别的插件 manifest；仓库根目录的 `manifest.json` 不是。
+
    **备选方案：开发/测试时临时加载**
    ```
    claude --plugin-dir /absolute/path/to/superpowers-flow-enforcer
@@ -186,7 +188,10 @@ PreToolUse hook 执行 TDD 铁律：
 ## 文件结构
 
 ```
-manifest.json          # 插件元数据
+.claude-plugin/
+├── plugin.json        # Claude Code 在 /plugin 中使用的官方插件 manifest
+└── marketplace.json   # 这个仓库自带的本地/测试 marketplace 目录文件
+manifest.json          # 旧的仓库级元数据，不是 Claude Code 官方插件 manifest
 CLAUDE.md              # Claude 指令文档
 README.md              # 英文文档
 README_cn.md           # 中文文档
@@ -244,6 +249,8 @@ vendor/
 ## 故障排除
 
 **Hook 未触发**: 执行 `/plugin` 查看 Installed/Errors，再执行 `/reload-plugins`。
+
+**插件可见但元数据不对**: 先检查 `.claude-plugin/plugin.json`。Claude Code 在 `/plugin` 里识别插件身份看的是这个文件，不是仓库根目录的 `manifest.json`。
 
 **意外被阻断**: 检查状态文件的当前阶段状态。可能需要先完成前一阶段。
 

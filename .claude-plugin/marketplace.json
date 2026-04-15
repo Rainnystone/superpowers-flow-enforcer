@@ -3,6 +3,9 @@
   "owner": {
     "name": "Rainnystone"
   },
+  "metadata": {
+    "description": "Local/test marketplace entry for installing the superpowers-flow-enforcer Claude Code plugin."
+  },
   "plugins": [
     {
       "name": "superpowers-flow-enforcer",
