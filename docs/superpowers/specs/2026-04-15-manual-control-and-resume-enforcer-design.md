@@ -317,7 +317,26 @@ Recovery should be required only when all of the following are true:
 3. the workflow does not already appear cleanly finished
 4. there is evidence the workflow had actually progressed beyond a trivial inactive shell
 
-For this round, the spec requires the implementation plan to make those conditions deterministic and testable. Representative progress signals include:
+For this round, those conditions must be made deterministic and testable.
+
+### Cleanly finished predicate
+
+For the purpose of skipping the recovery gate, a workflow counts as cleanly finished only when all of the following are true:
+
+1. `finishing.invoked == true`
+2. `task_flow.active_task_id == null`
+3. either:
+   - `review.tasks` is empty
+   - or every recorded task in `review.tasks` has both `spec_review_passed == true` and `code_review_passed == true`
+
+This is separate from manual shutdown:
+
+1. `workflow.override == "manual_off"` is a clean manual closure path
+2. an active session with partial review state is **not** cleanly finished
+
+### Progress signals for recovery-required evaluation
+
+Representative progress signals include:
 
 1. `current_phase != "init"`
 2. `brainstorming.spec_written == true`
@@ -330,13 +349,37 @@ Representative no-gate cases include:
 
 1. `workflow.active != true`
 2. `workflow.override == "manual_off"`
-3. workflow already cleanly finished by this plugin’s current finishing model
+3. workflow already satisfies the cleanly finished predicate above
+
+### Lifecycle of `resume.recovery_required`
+
+`resume.recovery_required` is workflow-scoped, not merely session-scoped.
+
+That means:
+
+1. `SessionStart(source=resume)` may set it to `true`
+2. once true, it must remain true across later session starts, including non-resume starts, until a deterministic clear condition occurs
+3. non-resume `SessionStart` must not blindly clear it just because the new source is not `resume`
+
+Deterministic clear conditions for this round are:
+
+1. successful completion of the dedicated recovery skill
+2. `workflow.active != true`
+3. `workflow.override == "manual_off"`
+4. the cleanly finished predicate above is satisfied
+
+If none of those conditions hold, later `startup` or additional `resume` starts should preserve the recovery gate rather than silently dropping it.
 
 ## E. Add a dedicated manual recovery skill
 
 Add a manual recovery skill referred to in this design as `resume-enforcer`.
 
-The exact installed slash form may depend on Claude Code plugin skill naming, but the shipped user-facing docs should present the shortest real invocation surface available to the plugin packaging model.
+This round pins the skill to a concrete repo boundary:
+
+1. primary skill file: `skills/resume-enforcer/SKILL.md`
+2. explicit resume-state recording helper: `scripts/record-resume-state.sh`
+
+The exact installed slash form may still depend on Claude Code plugin skill naming, but the shipped user-facing docs should present the shortest real invocation surface available to the plugin packaging model. The implementation plan must therefore plan against the concrete file boundary above, not against an abstract conceptual command.
 
 ### Invocation model
 
@@ -377,7 +420,7 @@ At the end of a successful recovery run, the skill must record:
 1. `resume.recovery_required = false`
 2. `resume.recovery_completed_at = <timestamp>`
 
-The recording path should stay aligned with the repo’s existing explicit state-update discipline.
+The recording path must stay aligned with the repo’s existing explicit state-update discipline and should use the dedicated helper above rather than ad-hoc mutation.
 
 ## F. Add a resume recovery gate to execution hooks
 
@@ -398,6 +441,20 @@ This gate is intentionally narrow:
 1. it blocks execution progression
 2. it does not block ordinary resume startup itself
 3. it does not block non-execution hooks that are needed to bootstrap or inspect state
+
+### Bash boundary for this round
+
+This round does **not** extend the resume recovery gate to `PreToolUse:Bash`.
+
+That is an intentional scope boundary, not an omission:
+
+1. the repo already treats Bash gating as a separate policy surface
+2. the purpose of this design is to control primary workflow execution surfaces:
+   - `Edit`
+   - `Write`
+   - `Agent`
+3. the implementation plan must not overclaim that this round closes arbitrary shell-based mutation paths
+4. if later product requirements need recovery-gated Bash mutation control, that should be a follow-up design
 
 ## G. Documentation changes
 
@@ -471,7 +528,7 @@ This design is complete when all of the following are true:
    - `enable/disable enforcer`
 2. the existing longer phrases still work
 3. enforcer control no longer risks colliding with interrupt semantics in the same prompt path
-4. resumed unfinished workflows cannot continue directly into new edits, writes, or subagent execution
+4. resumed unfinished workflows cannot continue directly into new `Edit`, `Write`, or subagent execution
 5. resumed unfinished workflows must first run the dedicated recovery skill
 6. the recovery skill reconstructs the current workflow position from state plus persisted records without silently advancing the workflow
 7. resumed inactive or cleanly finished workflows remain quiet and unblocked
@@ -479,7 +536,6 @@ This design is complete when all of the following are true:
 ## Open Questions
 
 1. what is the shortest real invocation surface the plugin packaging model can expose for the recovery skill in Claude Code, and should docs show the fully qualified installed name or an alias?
-2. which exact deterministic signals should define "cleanly finished" for the purpose of skipping the recovery gate when `workflow.active == true` but finishing has already been completed?
 
 ## Recommended Next Step
 
