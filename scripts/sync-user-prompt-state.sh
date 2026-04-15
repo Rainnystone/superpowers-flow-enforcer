@@ -235,7 +235,8 @@ NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
 
 record_interrupt_if_requested() {
-  if echo "$PROMPT_LC" | grep -qE '停止|stop|pause|暂停|明天继续|稍后继续|休息一下|break'; then
+  if echo "$PROMPT_LC" | grep -qE '停止|pause|暂停|明天继续|稍后继续|休息一下|break' || \
+    echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop($|[[:punct:]])|(^|[^[:alpha:]])stop[[:space:]]+(for[[:space:]]+now|here|please|now)([[:punct:]]|$)'; then
     jq --arg reason "$USER_PROMPT" '.interrupt.allowed = true | .interrupt.reason = $reason | del(.interrupt.keywords_detected)' "$STATE_FILE" > "$tmp_file"
     mv "$tmp_file" "$STATE_FILE"
   fi
