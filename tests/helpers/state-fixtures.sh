@@ -97,6 +97,12 @@ write_v2_state_with_partial_resume() {
   mv "$1.tmp" "$1"
 }
 
+write_v2_state_with_string_resume_fields() {
+  write_v2_state "$1"
+  jq '.resume.recovery_completed_at = "2026-04-15T10:20:30Z" | .resume.last_resume_source = "manual-control"' "$1" > "$1.tmp"
+  mv "$1.tmp" "$1"
+}
+
 write_v2_state_with_invalid_resume_types() {
   write_v2_state "$1"
   jq '.resume = {"recovery_required":"false","recovery_completed_at":{},"last_resume_source":[]}' "$1" > "$1.tmp"

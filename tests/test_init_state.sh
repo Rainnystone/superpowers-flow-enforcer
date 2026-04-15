@@ -777,6 +777,13 @@ if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flo
   exit 1
 fi
 
+write_v2_state_with_string_resume_fields "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+  echo "Expected migrate-state.sh --check-safe to accept non-null string resume fields" >&2
+  cat /tmp/test-migrate-safe.err >&2
+  exit 1
+fi
+
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 jq '.task_flow = null' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp"
 mv "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
