@@ -58,12 +58,21 @@
 
 插件不会对每个 Claude Code 会话强行激活 workflow。如果 workflow 从未激活，workflow-only 门禁会保持 inactive，不会阻断普通 Claude Code 工作。
 
-如果你不想依赖自动路径激活，也可以手动控制：
+如果你不想依赖自动路径激活，也可以手动控制。本轮默认推荐的控制词是：
+
+- `开启 enforcer`
+- `关闭 enforcer`
+- `enable enforcer`
+- `disable enforcer`
+
+为了兼容既有习惯和脚本，长命令仍然可用：
 
 - `激活 superpowers enforcer`
 - `关闭 superpowers enforcer`
 - `activate superpowers enforcer`
 - `deactivate superpowers enforcer`
+
+但本轮不推荐把 `启动 enforcer`、`停止 enforcer`、`start enforcer`、`stop enforcer` 当作控制面。要关闭强制执行，请用 `关闭 enforcer` / `disable enforcer`，不要把 `stop` 理解成“关闭 enforcement”。
 
 ## Hook 系统
 
@@ -138,13 +147,32 @@ PreToolUse hook 执行 TDD 铁律：
 
 ## 中断处理
 
-需要暂停时：
+需要暂停任务时，请用明确的中断词汇：
 
-**英文**: "stop", "pause", "break"
+- `stop task`
+- `pause task`
+- `停止任务`
+- `暂停任务`
 
-**中文**: "停止", "暂停", "暂停一下", "休息一下", "明天继续", "稍后继续"
+这些命令和 enforcer 开关是两回事。`stop` 不表示关闭 workflow enforcement。
 
 暂停处理是 text keyword 检测：从用户文本关键词写入 `interrupt.allowed`，再由 `Stop` 读取状态后放行停止。
+
+## 恢复握手
+
+如果是恢复一个未完成 workflow，必须先运行 `/superpowers-flow-enforcer:resume-enforcer`，然后才能开始新的编辑或新的 Agent 派发。这一步是恢复流程的一部分，不是可选补救。
+
+仓库级恢复规划记录放在 `.planning-with-files/`：
+
+- `.planning-with-files/task_plan.md`
+- `.planning-with-files/progress.md`
+- `.planning-with-files/findings.md`
+
+恢复相关状态字段包括：
+
+- `resume.recovery_required`
+- `resume.recovery_completed_at`
+- `resume.last_resume_source`
 
 ## 完成前验证
 
@@ -193,6 +221,7 @@ vendor/
 - `worktree.*`: `created`、`path`、`baseline_verified`
 - `tdd.*`: `pending_failure_record`、`last_failed_command`、`test_files_created`、`production_files_written`、`tests_verified_fail`、`tests_verified_pass`
 - `task_flow.*`: `active_task_id`、`active_packet_role`、`last_dispatch_at`
+- `resume.*`: `recovery_required`、`recovery_completed_at`、`last_resume_source`
 - `review.tasks`: 每个任务的审查状态
 - `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found
@@ -219,6 +248,8 @@ vendor/
 **意外被阻断**: 检查状态文件的当前阶段状态。可能需要先完成前一阶段。
 
 **为什么 workflow 门禁没生效**: 先确认当前会话是否真的进入了 superpowers workflow，比如是否记录了 skip 请求、是否明确输入了 `激活 superpowers enforcer` / `activate superpowers enforcer`，或者是否写入了当前项目作用域内的 canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`。
+
+**恢复中的未完成 workflow 被拦住了**: 先运行 `/superpowers-flow-enforcer:resume-enforcer`。只要 `resume.recovery_required` 还没有清掉，就不要开始新的编辑或新的 Agent 派发。恢复时会读取 `.planning-with-files/` 下的规划记录。
 
 **Bash gate 提示需要 Node**: 安装 Node 18+，或者确保 `node` 在 `PATH` 里。激活中的 Bash gate 会通过 Node 运行 vendored 的 parser runtime。
 

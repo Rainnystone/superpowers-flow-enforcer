@@ -58,12 +58,21 @@ Use the three pieces together during brainstorming, spec, planning, execution, r
 
 The plugin does not force workflow entry on every Claude Code session. If the workflow never becomes active, workflow-only gates remain inactive and ordinary Claude Code work is not blocked by those phase checks.
 
-Manual control is also available when you do not want to rely on path-based auto-entry:
+Manual control is also available when you do not want to rely on path-based auto-entry. The recommended control surface in this round is:
+
+- `开启 enforcer`
+- `关闭 enforcer`
+- `enable enforcer`
+- `disable enforcer`
+
+Long-form compatibility still exists for existing habits and scripts:
 
 - `激活 superpowers enforcer`
 - `关闭 superpowers enforcer`
 - `activate superpowers enforcer`
 - `deactivate superpowers enforcer`
+
+`启动 enforcer`, `停止 enforcer`, `start enforcer`, and `stop enforcer` are explicitly not the recommended control surface in this round. Use `disable enforcer` / `关闭 enforcer` to turn enforcement off. Do not rely on `stop` to disable enforcement.
 
 ## Hook System
 
@@ -139,13 +148,32 @@ The plugin will:
 
 ## Interrupt Handling
 
-When you need to pause:
+When you need to pause, use explicit interrupt vocabulary:
 
-**English**: "stop", "pause", "break"
+- `stop task`
+- `pause task`
+- `停止任务`
+- `暂停任务`
 
-**Chinese**: "停止", "暂停", "暂停一下", "休息一下", "明天继续", "稍后继续"
+These task-interrupt commands are distinct from enforcer control. `stop` does not disable workflow enforcement.
 
 Pause handling is text keyword based: keywords in user text are recorded into `interrupt.allowed`, and `Stop` reads that state to allow a clean stop.
+
+## Resume Recovery
+
+When you resume an unfinished workflow, run `/superpowers-flow-enforcer:resume-enforcer` before any new edits or Agent dispatch. The recovery handshake is part of resuming work, not an optional cleanup step.
+
+Repo-specific recovery planning records live under `.planning-with-files/`:
+
+- `.planning-with-files/task_plan.md`
+- `.planning-with-files/progress.md`
+- `.planning-with-files/findings.md`
+
+State tracking for resumed workflows includes:
+
+- `resume.recovery_required`
+- `resume.recovery_completed_at`
+- `resume.last_resume_source`
 
 ## Verification Before Completion
 
@@ -192,6 +220,7 @@ Tracks:
 - `worktree.*`: `created`, `path`, `baseline_verified`
 - `tdd.*`: `pending_failure_record`, `last_failed_command`, `test_files_created`, `production_files_written`, `tests_verified_fail`, `tests_verified_pass`
 - `task_flow.*`: `active_task_id`, `active_packet_role`, `last_dispatch_at`
+- `resume.*`: `recovery_required`, `recovery_completed_at`, `last_resume_source`
 - `review.tasks`: per-task review status
 - `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found
@@ -218,6 +247,8 @@ The plugin references these superpowers skills:
 **Blocked unexpectedly**: Check state file for current phase status. May need to complete earlier phase.
 
 **Workflow gate not applying**: Confirm the session has actually entered the superpowers workflow, for example through a skip request, by saying `激活 superpowers enforcer` / `activate superpowers enforcer`, or by writing a canonical workflow artifact under either `docs/superpowers/specs|plans/*.md` at the root or the same canonical path inside the current project subtree.
+
+**Resumed unfinished workflow is blocked**: Run `/superpowers-flow-enforcer:resume-enforcer` first. Until recovery clears `resume.recovery_required`, do not start new edits or Agent dispatch. Recovery planning context is read from `.planning-with-files/`.
 
 **Bash gate says Node is required**: Install Node 18+ or make `node` available on `PATH`. The active Bash gate runs the vendored parser runtime through Node.
 

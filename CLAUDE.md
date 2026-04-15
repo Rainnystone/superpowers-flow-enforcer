@@ -6,11 +6,12 @@
 
 The plugin uses Claude Code hooks to enforce workflow only after explicit workflow entry:
 
-- **Workflow Entry**: The current implementation treats skip requests, the explicit prompts `激活 superpowers enforcer` / `activate superpowers enforcer`, and canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` writes within the current project scope as entry signals. Root-level canonical paths remain valid, subtree canonical paths such as `packages/foo/docs/superpowers/specs/*.md` also activate, and excluded trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata do not.
+- **Workflow Entry**: The current implementation treats skip requests, the recommended short commands `开启 enforcer` / `enable enforcer`, the long-form compatibility prompts `激活 superpowers enforcer` / `activate superpowers enforcer`, and canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md` writes within the current project scope as entry signals. Root-level canonical paths remain valid, subtree canonical paths such as `packages/foo/docs/superpowers/specs/*.md` also activate, and excluded trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata do not.
 - **Pre-Activation Behavior**: If the session never enters the workflow, workflow-only gates stay inactive and ordinary Claude Code work is not blocked by those phase checks.
-- **Manual Control**: `激活 superpowers enforcer` / `activate superpowers enforcer` turns workflow enforcement on explicitly. `关闭 superpowers enforcer` / `deactivate superpowers enforcer` turns it off explicitly and prevents passive path-based reactivation until a new explicit workflow-intent signal appears.
+- **Manual Control**: Prefer `开启 enforcer` / `enable enforcer` to turn workflow enforcement on and `关闭 enforcer` / `disable enforcer` to turn it off. Long-form compatibility still exists for `激活 superpowers enforcer` / `activate superpowers enforcer` and `关闭 superpowers enforcer` / `deactivate superpowers enforcer`. `启动 enforcer`, `停止 enforcer`, `start enforcer`, and `stop enforcer` are not the recommended control surface in this round, and `stop` must not be interpreted as disabling enforcement.
 - **Bash Runtime**: `PreToolUse/Bash` is command-only, silent while `workflow.active != true`, and uses the vendored `vendor/bash-traverse` runtime through Node 18+ once the workflow is active.
 - **Brainstorming / Planning**: After activation, SPEC writing still requires self-review and user approval before planning can proceed.
+- **Resume Recovery**: On resumed unfinished workflows, run `/superpowers-flow-enforcer:resume-enforcer` before any new edits or Agent dispatch. Recovery planning context lives under `.planning-with-files/`, and state tracking includes `resume.recovery_required`, `resume.recovery_completed_at`, and `resume.last_resume_source`.
 - **TDD Phase**: Production code is blocked without a verified failing test.
 - **Review Phase**: Task completion requires two-stage review (spec + code quality), and packetized Agent dispatch cannot start the next task's implementer before the current open task has passed both review stages.
 - **Verification / Stop**: Completion claims still need fresh verification evidence from the current `last_assistant_message`. The Stop hook is command-only, and state-based stop gates fail open when state is missing, unreadable, or workflow is inactive.
@@ -28,9 +29,9 @@ After confirmation, the bypass is recorded in state and hooks will allow the ski
 ## Interrupt Handling
 
 When you need to pause work, say:
-- "停止" / "stop" / "pause" / "暂停" / "明天继续"
+- `stop task` / `pause task` / `停止任务` / `暂停任务`
 
-Pause handling is text keyword based: keywords in user text set `interrupt.allowed`, and the command-only `Stop` hook reads that state to allow a clean stop.
+Pause handling is text keyword based: keywords in user text set `interrupt.allowed`, and the command-only `Stop` hook reads that state to allow a clean stop. These interrupt phrases are separate from enforcer control; `stop` does not disable enforcement.
 
 ## State File
 
