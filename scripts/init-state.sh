@@ -86,6 +86,23 @@ normalize_task_flow_state() {
   mv "${STATE_FILE}.tmp" "$STATE_FILE"
 }
 
+normalize_resume_state() {
+  jq '
+    if (.resume | type) == "object" then
+      .resume.recovery_required = (.resume.recovery_required // false)
+      | .resume.recovery_completed_at = (.resume.recovery_completed_at // null)
+      | .resume.last_resume_source = (.resume.last_resume_source // null)
+    else
+      .resume = {
+        "recovery_required": false,
+        "recovery_completed_at": null,
+        "last_resume_source": null
+      }
+    end
+  ' "$STATE_FILE" > "${STATE_FILE}.tmp"
+  mv "${STATE_FILE}.tmp" "$STATE_FILE"
+}
+
 backup_and_reset_state() {
   cp "$STATE_FILE" "${STATE_FILE}.bak"
   initialize_state
@@ -120,6 +137,7 @@ if [ -f "$STATE_FILE" ]; then
     bash "$MIGRATE_SCRIPT" "$STATE_FILE"
     normalize_workflow_state
     normalize_task_flow_state
+    normalize_resume_state
     echo "{\"continue\": true, \"systemMessage\": \"Flow state migrated to v2 at $STATE_FILE\"}"
     exit 0
   fi
@@ -248,6 +266,57 @@ if [ -f "$STATE_FILE" ]; then
   if [ "$TASK_FLOW_STATUS" = "missing" ] || [ "$TASK_FLOW_STATUS" = "needs_normalization" ]; then
     normalize_task_flow_state
   elif [ "$TASK_FLOW_STATUS" = "unsafe" ]; then
+    backup_and_reset_state
+    echo "{\"continue\": true, \"systemMessage\": \"Flow state backed up and reset at $STATE_FILE\"}"
+    exit 0
+  fi
+
+  RESUME_STATUS="$(jq -r '
+    if has("resume") then
+      if (.resume | type) != "object" then
+        "unsafe"
+      else
+        def resume_field_status($key; $allowed_types):
+          if (.resume | has($key)) then
+            (.resume[$key] | type) as $field_type
+            | if ($allowed_types | index($field_type)) then
+                "valid"
+              elif $field_type == "null" then
+                "needs_normalization"
+              else
+                "unsafe"
+              end
+          else
+            "needs_normalization"
+          end;
+
+        (resume_field_status("recovery_required"; ["boolean"])) as $recovery_required_status
+        | (resume_field_status("recovery_completed_at"; ["string"])) as $recovery_completed_at_status
+        | (resume_field_status("last_resume_source"; ["string"])) as $last_resume_source_status
+        | if (
+            $recovery_required_status == "unsafe"
+            or $recovery_completed_at_status == "unsafe"
+            or $last_resume_source_status == "unsafe"
+          ) then
+            "unsafe"
+          elif (
+            $recovery_required_status == "needs_normalization"
+            or $recovery_completed_at_status == "needs_normalization"
+            or $last_resume_source_status == "needs_normalization"
+          ) then
+            "needs_normalization"
+          else
+            "valid"
+          end
+      end
+    else
+      "missing"
+    end
+  ' "$STATE_FILE")"
+
+  if [ "$RESUME_STATUS" = "missing" ] || [ "$RESUME_STATUS" = "needs_normalization" ]; then
+    normalize_resume_state
+  elif [ "$RESUME_STATUS" = "unsafe" ]; then
     backup_and_reset_state
     echo "{\"continue\": true, \"systemMessage\": \"Flow state backed up and reset at $STATE_FILE\"}"
     exit 0

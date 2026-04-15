@@ -18,6 +18,40 @@ if [ "$MODE" = "--check-safe" ]; then
         and (.finishing | type) == "object"
         and (.debugging | type) == "object"
         and (
+          if has("resume") then
+            (.resume | type) == "object"
+            and (
+              if (.resume | has("recovery_required")) then
+                (.resume.recovery_required | type) == "boolean"
+              else
+                true
+              end
+            )
+            and (
+              if (.resume | has("recovery_completed_at")) then
+                (
+                  (.resume.recovery_completed_at | type) == "string"
+                  or (.resume.recovery_completed_at | type) == "null"
+                )
+              else
+                true
+              end
+            )
+            and (
+              if (.resume | has("last_resume_source")) then
+                (
+                  (.resume.last_resume_source | type) == "string"
+                  or (.resume.last_resume_source | type) == "null"
+                )
+              else
+                true
+              end
+            )
+          else
+            true
+          end
+        )
+        and (
           if has("task_flow") then
             (.task_flow | type) == "object"
             and (
@@ -138,6 +172,11 @@ jq '
       "active_task_id": null,
       "active_packet_role": null,
       "last_dispatch_at": null
+    },
+    "resume": {
+      "recovery_required": false,
+      "recovery_completed_at": null,
+      "last_resume_source": null
     },
     "tdd": {
       "current_task": (.tdd.current_task // null),
