@@ -25,15 +25,11 @@ The current repository behaves like this:
    - `activate superpowers enforcer`
    - `deactivate superpowers enforcer`
 2. those phrases are handled inside `scripts/sync-user-prompt-state.sh`
-3. text pause / interrupt intent is also handled in `scripts/sync-user-prompt-state.sh` through broad keyword detection such as:
-   - `停止`
-   - `stop`
-   - `pause`
-   - `暂停`
-   - `break`
-4. the plugin currently has no dedicated resume state surface and no workflow-specific recovery handshake for resumed sessions
-5. `SessionStart` currently initializes or normalizes state, but it does not treat `source == "resume"` as a distinct product path
-6. the repo already follows a deterministic state-recording pattern for key workflow facts:
+3. text pause / interrupt intent is also handled in `scripts/sync-user-prompt-state.sh`
+4. that interrupt path has historically depended on broad free-form keyword inference, which has proven too ambiguous and is intentionally narrowed in this round
+5. the plugin currently has no dedicated resume state surface and no workflow-specific recovery handshake for resumed sessions
+6. `SessionStart` currently initializes or normalizes state, but it does not treat `source == "resume"` as a distinct product path
+7. the repo already follows a deterministic state-recording pattern for key workflow facts:
    - `record-spec-state.sh`
    - `record-review-state.sh`
    - `record-finishing-state.sh`
@@ -65,14 +61,14 @@ The practical consequence is:
 
 The current control phrases are correct but unnecessarily long for everyday use. Users should not need to remember the full `superpowers` wording every time they want to enable or disable enforcement.
 
-### 2. `stop` is already overloaded
+### 2. broad `stop` / `pause` inference is too ambiguous
 
-The natural short verbs `停止` and `stop` are already bound to pause / interrupt semantics. Reusing them as primary enforcer control verbs would mix two different intentions:
+The natural short verbs `停止`, `暂停`, `stop`, and `pause` are easy to type, but broad free-form inference around them mixes multiple intentions:
 
 1. stop or pause the current conversation flow
 2. disable workflow enforcement itself
 
-That ambiguity is avoidable and should not be introduced in this round.
+That ambiguity is avoidable. This round should reduce it rather than preserve it.
 
 ### 3. Resumed unfinished workflow sessions have no recovery handshake
 
@@ -121,15 +117,28 @@ Shorter commands are valuable only if they do not collide with existing pause / 
 
 Existing documented phrases should continue to work. This round adds a better default entry point; it should not break the current one.
 
-### 3. Recovery must be explicit
+### 3. Interrupt commands should also be explicit
+
+This round does not preserve broad natural-language interrupt guessing.
+
+After prompt normalization, only these exact commands set `interrupt.allowed`:
+
+1. `停止任务`
+2. `暂停任务`
+3. `stop task`
+4. `pause task`
+
+Other prompts, including broader phrases such as `暂停，明天继续` or `Please stop after this step`, should not be treated as interrupt commands in this round.
+
+### 4. Recovery must be explicit
 
 If a workflow was left unfinished, the repo should require one explicit recovery action before allowing new edits, writes, or subagent dispatches. The goal is not convenience at all costs. The goal is deterministic recovery.
 
-### 4. Keep hooks deterministic and keep the heavy work in a skill
+### 5. Keep hooks deterministic and keep the heavy work in a skill
 
 `SessionStart` should stay fast. The heavy interpretation step belongs in a manual recovery skill that reads the persisted state and working tree deliberately.
 
-### 5. Do not silently complete state work on the user’s behalf
+### 6. Do not silently complete state work on the user’s behalf
 
 Recovery should tell Claude what is true and what should happen next. It should not silently mark review as done, mark finishing as invoked, or fabricate planning-with-files progress.
 
@@ -262,7 +271,7 @@ When a prompt contains a recognized enforcer control clause:
 This preserves a clean boundary:
 
 1. `关闭 enforcer` means workflow control
-2. `暂停一下` means conversational interrupt intent
+2. `暂停任务` means explicit conversational interrupt intent
 
 The repo should not try to combine both semantics in one submission during this round.
 
@@ -550,7 +559,8 @@ The implementation plan must include tests for at least the following behaviors.
 5. existing long phrases still work
 6. explanatory or negated uses of the short phrases do not mutate state
 7. matched enforcer-control prompts do not also write `interrupt.allowed`
-8. ordinary `停止` / `stop` / `pause` prompts still retain existing interrupt behavior when they are not enforcer-control phrases
+8. only the exact interrupt commands `停止任务` / `暂停任务` / `stop task` / `pause task` set `interrupt.allowed`
+9. broader natural-language prompts such as `暂停，明天继续` or `Please stop after this step` do not set `interrupt.allowed`
 
 ### Resume state initialization
 

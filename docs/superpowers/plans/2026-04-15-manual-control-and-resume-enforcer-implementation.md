@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Implement shorter recommended enforcer control phrases and a deterministic `/superpowers-flow-enforcer:resume-enforcer` recovery handshake for resumed unfinished workflows without widening the broader workflow state machine.
+**Goal:** Implement shorter recommended enforcer control phrases, a small explicit interrupt-command surface, and a deterministic `/superpowers-flow-enforcer:resume-enforcer` recovery handshake for resumed unfinished workflows without widening the broader workflow state machine.
 
-**Architecture:** Keep the runtime deterministic. First extend `flow_state.json` with explicit resume metadata and safe normalization/migration rules. Then update `UserPromptSubmit`, `SessionStart`, and `PreToolUse` so manual control and resume recovery are driven by observable state only. Finally, add one plugin-bundled recovery skill plus a helper record script, clear `task_flow` on the normal finishing path, and sync the user-facing docs to the new control surface.
+**Architecture:** Keep the runtime deterministic. First extend `flow_state.json` with explicit resume metadata and safe normalization/migration rules. Then update `UserPromptSubmit`, `SessionStart`, and `PreToolUse` so manual control, explicit interrupt commands, and resume recovery are driven by observable state only. Finally, add one plugin-bundled recovery skill plus a helper record script, clear `task_flow` on the normal finishing path, and sync the user-facing docs to the new control surface.
 
 **Tech Stack:** Claude Code plugin hooks, Bash, `jq`, shell regression tests, Markdown docs/skills
 
@@ -20,7 +20,8 @@ Do not widen this implementation into:
 2. automatic phase advancement during recovery
 3. Bash write-equivalence with `Edit|Write`
 4. heuristic parsing of free-form recovery intent
-5. making root-level `task_plan.md` / `progress.md` / `findings.md` a new canonical source for this repo
+5. heuristic parsing of broad natural-language interrupt intent
+6. making root-level `task_plan.md` / `progress.md` / `findings.md` a new canonical source for this repo
 
 ## AGENTS Task-Splitting Rules
 
@@ -182,7 +183,7 @@ git commit -m "fix: add resume recovery state schema"
 
 ## Task 2: Add Short Manual Control Phrases And Interrupt Priority
 
-**User-facing goal:** Users can control enforcement with `开启/关闭 enforcer` and `enable/disable enforcer`, while `stop` remains part of interrupt handling instead of becoming a workflow control synonym.
+**User-facing goal:** Users can control enforcement with `开启/关闭 enforcer` and `enable/disable enforcer`, and interrupt intent is reduced to a small exact-command whitelist instead of broad natural-language guessing.
 
 **Files:**
 - Modify: `scripts/sync-user-prompt-state.sh`
@@ -197,6 +198,19 @@ Extend `tests/test_bypass_state.sh` with accepted prompt cases for:
 2. `先整理上下文，然后关闭 enforcer 再继续`
 3. `Please enable enforcer, thanks`
 4. `disable enforcer and stop for now`
+
+Extend the interrupt coverage so only these exact prompts are positive:
+
+1. `停止任务`
+2. `暂停任务`
+3. `stop task`
+4. `pause task`
+
+And make representative former broad prompts explicit negatives, such as:
+
+1. `暂停，明天继续`
+2. `Please stop for now`
+3. `Please stop after this step`
 
 For the control prompts, assert:
 
@@ -224,7 +238,7 @@ Run:
 bash tests/test_bypass_state.sh
 ```
 
-Expected: FAIL because the script does not yet recognize the short phrases and still records interrupt keywords after manual control handling.
+Expected: FAIL because the script does not yet match the short enforcer phrases and still uses broader interrupt detection than the new explicit-command contract allows.
 
 - [ ] **Step 3: Write the minimal implementation**
 
@@ -250,7 +264,17 @@ Update `scripts/sync-user-prompt-state.sh` so:
 
 3. recognized enforcer-control prompts are processed before `record_interrupt_if_requested`
 4. once a control clause matches, the script exits without writing `interrupt.allowed` from the same prompt
-5. explanatory / quoted / negated prompt rejection stays intact
+5. interrupt recording is reduced to the exact normalized prompts:
+
+```bash
+"停止任务"
+"暂停任务"
+"stop task"
+"pause task"
+```
+
+6. broader natural-language stop/pause prompts no longer set `interrupt.allowed`
+7. explanatory / quoted / negated prompt rejection for enforcer control stays intact
 
 - [ ] **Step 4: Run the test to verify GREEN**
 
