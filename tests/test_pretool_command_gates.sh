@@ -407,6 +407,17 @@ assert_pretool_allow "$allow_output"
 
 write_v2_state "$STATE_FILE"
 jq '
+  .workflow.active = false
+  | .workflow.override = "manual_off"
+  | .resume.recovery_required = true
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+
+allow_output="$(run_write_gate 'src/manual-off-resume-stale.ts')"
+assert_pretool_allow "$allow_output"
+
+write_v2_state "$STATE_FILE"
+jq '
   .workflow.active = true
   | .current_phase = "brainstorming"
   | .brainstorming.question_asked = true

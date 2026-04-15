@@ -311,7 +311,9 @@ if [ "$TOOL_NAME" = "AskUserQuestion" ]; then
   exit 0
 fi
 
-if state_is_true '.resume.recovery_required'; then
+if state_is_true '.resume.recovery_required' \
+  && state_is_true '.workflow.active' \
+  && ! jq -e '.workflow.override == "manual_off"' "$STATE_FILE" >/dev/null 2>&1; then
   if [ "$TOOL_NAME" = "Edit" ] || [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Agent" ]; then
     deny_pretool "检测到 resumed 的未完成 superpowers workflow。先执行 /superpowers-flow-enforcer:resume-enforcer 完成恢复摘要，再继续 Edit/Write/Agent。"
     exit 0

@@ -474,6 +474,8 @@ assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 
 write_v2_state "$STATE_FILE"
+jq '.resume.recovery_required = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
 
 SHORT_MANUAL_DEACTIVATE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"先整理上下文，然后关闭 enforcer 再继续"}' "$MANUAL_PROMPT_PROJECT" \
@@ -485,7 +487,24 @@ if [ -n "$SHORT_MANUAL_DEACTIVATE_OUTPUT" ]; then
 fi
 assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
 assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+
+write_v2_state "$STATE_FILE"
+
+SHORT_MANUAL_DEACTIVATE_EXACT_CN_OUTPUT="$(
+  jq '.resume.recovery_required = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+  mv "$STATE_FILE.tmp" "$STATE_FILE"
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"关闭 enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$SHORT_MANUAL_DEACTIVATE_EXACT_CN_OUTPUT" ]; then
+  echo "Expected exact Chinese short manual deactivate prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
 
 write_v2_state "$STATE_FILE"
 
@@ -748,7 +767,12 @@ assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
-jq '.interrupt.allowed = true | .interrupt.reason = "stale interrupt" | .interrupt.keywords_detected = ["legacy keyword"]' "$STATE_FILE" > "$STATE_FILE.tmp"
+jq '
+  .interrupt.allowed = true
+  | .interrupt.reason = "stale interrupt"
+  | .interrupt.keywords_detected = ["legacy keyword"]
+  | .resume.recovery_required = true
+' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
 
 DISABLE_CLEARS_STALE_INTERRUPT_OUTPUT="$(
@@ -763,6 +787,7 @@ assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
 assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' 'null'
 assert_json_equals "$STATE_FILE" '.workflow.activated_at' 'null'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'

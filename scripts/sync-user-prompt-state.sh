@@ -338,6 +338,7 @@ if is_manual_deactivate_prompt; then
     | .workflow.deactivated_at = $now
     | .workflow.activated_by = null
     | .workflow.activated_at = null
+    | .resume.recovery_required = false
     | .interrupt.allowed = false
     | .interrupt.reason = null
     | .interrupt.keywords_detected = []

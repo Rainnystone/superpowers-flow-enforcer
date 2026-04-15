@@ -79,7 +79,7 @@ Long-form compatibility still exists for existing habits and scripts:
 | Hook Event | Matcher | Enforcement |
 |------------|---------|-------------|
 | SessionStart | * | Initialize workflow state |
-| UserPromptSubmit | * | Bypass / interrupt detection + missing-state bootstrap |
+| UserPromptSubmit | * | Bypass / exact-command interrupt detection + missing-state bootstrap |
 | PreToolUse | Edit\|Write | Workflow-aware write gating + TDD IRON LAW |
 | PreToolUse | AskUserQuestion | Brainstorming findings update when workflow is active |
 | PreToolUse | Agent | Packetized task-boundary gate + reviewer-role enforcement for superpowers execution |
@@ -148,7 +148,7 @@ The plugin will:
 
 ## Interrupt Handling
 
-When you need to pause, use explicit interrupt vocabulary:
+When you need to pause, use one of these exact interrupt commands after whitespace normalization:
 
 - `stop task`
 - `pause task`
@@ -157,7 +157,7 @@ When you need to pause, use explicit interrupt vocabulary:
 
 These task-interrupt commands are distinct from enforcer control. `stop` does not disable workflow enforcement.
 
-Pause handling is text keyword based: keywords in user text are recorded into `interrupt.allowed`, and `Stop` reads that state to allow a clean stop.
+Pause handling is exact-command based: only those supported commands set `interrupt.allowed`, and the command-only `Stop` hook reads that state to allow a clean stop.
 
 ## Resume Recovery
 
@@ -225,7 +225,7 @@ Tracks:
 - `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found
 - `exceptions.*`: bypass flags, user confirmed
-- `interrupt.*`: allowed, reason, keywords detected
+- `interrupt.*`: allowed, reason, legacy `keywords_detected`
 
 ## Skills Enforced
 

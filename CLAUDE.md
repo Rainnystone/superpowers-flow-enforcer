@@ -28,10 +28,10 @@ After confirmation, the bypass is recorded in state and hooks will allow the ski
 
 ## Interrupt Handling
 
-When you need to pause work, say:
+When you need to pause work, say one of these exact commands after whitespace normalization:
 - `stop task` / `pause task` / `停止任务` / `暂停任务`
 
-Pause handling is text keyword based: keywords in user text set `interrupt.allowed`, and the command-only `Stop` hook reads that state to allow a clean stop. These interrupt phrases are separate from enforcer control; `stop` does not disable enforcement.
+Pause handling is exact-command based: only those supported commands set `interrupt.allowed`, and the command-only `Stop` hook reads that state to allow a clean stop. These interrupt commands are separate from enforcer control; `stop` does not disable enforcement.
 
 ## State File
 
@@ -48,7 +48,7 @@ The plugin maintains state at `$CLAUDE_PROJECT_DIR/.claude/flow_state.json` trac
 | Hook | Purpose |
 |------|---------|
 | SessionStart | Initialize state file |
-| UserPromptSubmit | Detect bypass / interrupt requests and self-heal missing state |
+| UserPromptSubmit | Detect bypass / exact-command interrupt requests and self-heal missing state |
 | PreToolUse (Edit\|Write) | Workflow-aware write gating + TDD enforcement |
 | PreToolUse (AskUserQuestion) | Brainstorming findings gate when workflow is active |
 | PreToolUse (Agent) | Packetized task-boundary gate + reviewer-role enforcement during superpowers execution |

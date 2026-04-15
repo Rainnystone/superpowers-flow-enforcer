@@ -79,7 +79,7 @@
 | Hook 事件 | 匹配器 | 强制执行 |
 |-----------|--------|----------|
 | SessionStart | * | 初始化工作流状态 |
-| UserPromptSubmit | * | Bypass / 中断检测 + 缺失状态自举 |
+| UserPromptSubmit | * | Bypass / 精确中断命令检测 + 缺失状态自举 |
 | PreToolUse | Edit\|Write | workflow-aware 写入门禁 + TDD 铁律 |
 | PreToolUse | AskUserQuestion | 仅在 workflow 激活时要求更新 Brainstorming findings |
 | PreToolUse | Agent | 仅针对 superpowers packetized execution 的 task-boundary 门禁 + reviewer 角色约束 |
@@ -147,7 +147,7 @@ PreToolUse hook 执行 TDD 铁律：
 
 ## 中断处理
 
-需要暂停任务时，请用明确的中断词汇：
+需要暂停任务时，请使用这些精确中断命令（会先做空白归一化）：
 
 - `stop task`
 - `pause task`
@@ -156,7 +156,7 @@ PreToolUse hook 执行 TDD 铁律：
 
 这些命令和 enforcer 开关是两回事。`stop` 不表示关闭 workflow enforcement。
 
-暂停处理是 text keyword 检测：从用户文本关键词写入 `interrupt.allowed`，再由 `Stop` 读取状态后放行停止。
+暂停处理是精确命令检测：只有这些受支持命令会写入 `interrupt.allowed`，再由 command-only 的 `Stop` 读取状态后放行停止。
 
 ## 恢复握手
 
@@ -226,7 +226,7 @@ vendor/
 - `finishing.*`: `invoked`
 - `debugging.*`: active, fixes attempted, root cause found
 - `exceptions.*`: bypass 标记, 用户确认
-- `interrupt.*`: allowed, reason, keywords detected
+- `interrupt.*`: allowed, reason, 兼容保留字段 `keywords_detected`
 
 ## 强制的 Skills
 
