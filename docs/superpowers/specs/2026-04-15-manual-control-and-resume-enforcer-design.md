@@ -416,6 +416,16 @@ This round explicitly ships the recovery skill as a real plugin-bundled skill fr
 
 Within this design document, `resume-enforcer` may still be used as shorthand for the skill itself. There is no additional alias in this round. The implementation plan must plan against the concrete file boundary above and the fully qualified installed invocation surface above.
 
+### Plugin discovery mechanism
+
+Per the official Claude Code plugin component model, plugin-bundled skills are discovered automatically from the plugin root `skills/` directory when the plugin is installed or loaded.
+
+For this round that means:
+
+1. the implementation must add `skills/resume-enforcer/SKILL.md` at plugin root
+2. no extra skill registry or manifest enumeration is required in `manifest.json` or `.claude-plugin/plugin.json`
+3. the namespaced slash invocation comes from the plugin packaging model itself, not from a separate alias layer
+
 ### Canonical planning-record location for this round
 
 For this repository, the recovery skill must read planning-with-files records only from the project-local directory:
