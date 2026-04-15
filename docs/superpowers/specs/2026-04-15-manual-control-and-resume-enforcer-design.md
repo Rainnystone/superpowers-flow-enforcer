@@ -336,6 +336,19 @@ This is separate from manual shutdown:
 1. `workflow.override == "manual_off"` is a clean manual closure path
 2. an active session with partial review state is **not** cleanly finished
 
+### Task-flow closure requirement
+
+This round must also make the clean-finish predicate achievable.
+
+That means the implementation must include one deterministic path that clears:
+
+1. `task_flow.active_task_id`
+2. `task_flow.active_packet_role`
+
+when the workflow reaches a cleanly finished state.
+
+For planning purposes, this responsibility belongs to the normal completion path rather than to the recovery skill. The implementation plan may choose the narrowest existing deterministic recording surface, but it must explicitly cover and test this task-flow cleanup so that a normally finished workflow can actually satisfy the clean-finish predicate above.
+
 ### Exact progress predicate for recovery-required evaluation
 
 For this round, `there is evidence the workflow had actually progressed beyond a trivial inactive shell` must be implemented as this exact OR predicate:
