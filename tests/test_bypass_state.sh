@@ -516,6 +516,42 @@ assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 
 write_v2_state "$STATE_FILE"
+jq '.interrupt.allowed = true | .interrupt.reason = "stale interrupt" | .interrupt.keywords_detected = ["legacy keyword"]' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+ENABLE_CLEARS_STALE_INTERRUPT_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$ENABLE_CLEARS_STALE_INTERRUPT_OUTPUT" ]; then
+  echo "Expected enable enforcer to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
+assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+jq '.interrupt.allowed = true | .interrupt.reason = "stale interrupt" | .interrupt.keywords_detected = ["legacy keyword"]' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+
+DISABLE_CLEARS_STALE_INTERRUPT_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer and stop for now"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$DISABLE_CLEARS_STALE_INTERRUPT_OUTPUT" ]; then
+  echo "Expected disable enforcer and stop for now to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_off"'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
 STATE_SNAPSHOT_BEFORE_MALFORMED_PROMPT="$(jq -c . "$STATE_FILE")"
 
 MISSING_PROMPT_OUTPUT="$(

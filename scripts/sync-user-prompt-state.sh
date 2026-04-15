@@ -310,6 +310,9 @@ if is_manual_deactivate_prompt; then
     | .workflow.override = "manual_off"
     | .workflow.deactivated_by = "manual_prompt"
     | .workflow.deactivated_at = $now
+    | .interrupt.allowed = false
+    | .interrupt.reason = null
+    | .interrupt.keywords_detected = []
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   exit 0
@@ -323,6 +326,9 @@ if is_manual_activate_prompt; then
     | .workflow.activated_at = $now
     | .workflow.deactivated_by = null
     | .workflow.deactivated_at = null
+    | .interrupt.allowed = false
+    | .interrupt.reason = null
+    | .interrupt.keywords_detected = []
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   exit 0
