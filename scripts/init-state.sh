@@ -281,6 +281,11 @@ if [ -f "$STATE_FILE" ]; then
             (.resume[$key] | type) as $field_type
             | if ($allowed_types | index($field_type)) then
                 "valid"
+              elif (
+                $field_type == "null"
+                and ($allowed_types | index("string")) != null
+              ) then
+                "valid"
               elif $field_type == "null" then
                 "needs_normalization"
               else

@@ -151,6 +151,32 @@ if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
   exit 1
 fi
 
+write_v2_state "$SESSION_CWD/.claude/flow_state.json"
+jq '
+  .workflow.activated_by = "system"
+  | .workflow.activated_at = "2026-04-15T10:00:00Z"
+  | .workflow.override = "manual-control"
+  | .workflow.deactivated_by = "system"
+  | .workflow.deactivated_at = "2026-04-15T10:05:00Z"
+' "$SESSION_CWD/.claude/flow_state.json" > "$SESSION_CWD/.claude/flow_state.json.tmp"
+mv "$SESSION_CWD/.claude/flow_state.json.tmp" "$SESSION_CWD/.claude/flow_state.json"
+cp "$SESSION_CWD/.claude/flow_state.json" "$SESSION_CWD/.claude/flow_state.before.json"
+rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+cmp -s \
+  "$SESSION_CWD/.claude/flow_state.json" \
+  "$SESSION_CWD/.claude/flow_state.before.json" || {
+  echo "Expected valid default resume state to remain unchanged during init normalization" >&2
+  exit 1
+}
+if [ -e "$SESSION_CWD/.claude/flow_state.json.bak" ]; then
+  echo "Expected valid default resume state to remain valid without backup" >&2
+  exit 1
+fi
+
 write_v2_state_with_partial_workflow "$SESSION_CWD/.claude/flow_state.json"
 rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
 
