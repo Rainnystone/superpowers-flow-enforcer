@@ -139,7 +139,7 @@ is_manual_control_clause_start() {
 
 is_manual_control_clause_continuation() {
   case "$1" in
-    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|and\ stop*|stop*|please*)
+    ""|然后*|再*|接着*|随后*|继续*|谢谢*|多谢*|谢啦*|thanks*|thx*|thank\ you*|and\ continue*|and\ return*|and\ then*|and\ stop\ for\ now*|stop\ for\ now*|please*)
       return 0
       ;;
   esac

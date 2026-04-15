@@ -516,6 +516,34 @@ assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' '"manual_prompt"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 
 write_v2_state "$STATE_FILE"
+
+NEGATIVE_STOPPED_WORKING_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer stopped working after the patch"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_STOPPED_WORKING_OUTPUT" ]; then
+  echo "Expected discussion prompt with stopped working to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+
+write_v2_state "$STATE_FILE"
+
+NEGATIVE_EXPLANATORY_STOP_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain disable enforcer stop semantics"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_EXPLANATORY_STOP_OUTPUT" ]; then
+  echo "Expected explanatory short-command prompt to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.deactivated_by' 'null'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+
+write_v2_state "$STATE_FILE"
 jq '.interrupt.allowed = true | .interrupt.reason = "stale interrupt" | .interrupt.keywords_detected = ["legacy keyword"]' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
 
