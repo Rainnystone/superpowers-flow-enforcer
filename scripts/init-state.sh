@@ -30,8 +30,23 @@ resolve_project_dir() {
   printf '%s\n' "$PWD"
 }
 
+resolve_session_start_source() {
+  if [ -z "$HOOK_INPUT" ]; then
+    return
+  fi
+
+  printf '%s' "$HOOK_INPUT" | jq -r '
+    if .hook_event_name == "SessionStart" and (.source | type) == "string" and .source != "" then
+      .source
+    else
+      empty
+    end
+  ' 2>/dev/null || true
+}
+
 PROJECT_DIR="$(resolve_project_dir)"
 STATE_FILE="$PROJECT_DIR/.claude/flow_state.json"
+SESSION_START_SOURCE="$(resolve_session_start_source)"
 
 initialize_state() {
   mkdir -p "$PROJECT_DIR/.claude"
@@ -108,6 +123,69 @@ backup_and_reset_state() {
   initialize_state
 }
 
+sync_resume_recovery_state() {
+  local tmp_file="${STATE_FILE}.tmp"
+
+  jq --arg source "$SESSION_START_SOURCE" '
+    def review_tasks:
+      if (.review.tasks | type) == "object" then .review.tasks else {} end;
+    def cleanly_finished:
+      .finishing.invoked == true
+      and .task_flow.active_task_id == null
+      and (
+        (review_tasks | length) == 0
+        or all(review_tasks[]?; .spec_review_passed == true and .code_review_passed == true)
+      );
+    def progressed:
+      .current_phase != "init"
+      or .brainstorming.question_asked == true
+      or .brainstorming.spec_written == true
+      or .planning.plan_written == true
+      or .worktree.created == true
+      or .task_flow.active_task_id != null
+      or (review_tasks | length) > 0
+      or ((.tdd.test_files_created // []) | length) > 0
+      or ((.tdd.production_files_written // []) | length) > 0
+      or ((.tdd.tests_verified_fail // []) | length) > 0
+      or ((.tdd.tests_verified_pass // []) | length) > 0;
+    def clear_recovery:
+      .workflow.active != true
+      or .workflow.override == "manual_off"
+      or cleanly_finished;
+    if $source == "resume" then
+      .resume.last_resume_source = "resume"
+      | if clear_recovery then
+          .resume.recovery_required = false
+        elif progressed then
+          .resume.recovery_required = true
+        else
+          .
+        end
+    elif clear_recovery then
+      .resume.recovery_required = false
+    else
+      .
+    end
+  ' "$STATE_FILE" > "$tmp_file"
+  mv "$tmp_file" "$STATE_FILE"
+}
+
+resume_hint_required() {
+  [ "$SESSION_START_SOURCE" = "resume" ] || return 1
+  jq -e '.resume.recovery_required == true' "$STATE_FILE" >/dev/null 2>&1
+}
+
+emit_success() {
+  local base_message="$1"
+
+  if resume_hint_required; then
+    echo '{"continue": true, "systemMessage": "检测到 resumed 的未完成 workflow，请先执行 /superpowers-flow-enforcer:resume-enforcer。"}'
+    return
+  fi
+
+  printf '{"continue": true, "systemMessage": "%s"}\n' "$base_message"
+}
+
 if [ -f "$STATE_FILE" ]; then
   if ! jq empty "$STATE_FILE" >/dev/null 2>&1; then
     backup_and_reset_state
@@ -138,7 +216,8 @@ if [ -f "$STATE_FILE" ]; then
     normalize_workflow_state
     normalize_task_flow_state
     normalize_resume_state
-    echo "{\"continue\": true, \"systemMessage\": \"Flow state migrated to v2 at $STATE_FILE\"}"
+    sync_resume_recovery_state
+    emit_success "Flow state migrated to v2 at $STATE_FILE"
     exit 0
   fi
 
@@ -327,11 +406,13 @@ if [ -f "$STATE_FILE" ]; then
     exit 0
   fi
 
-  echo '{"continue": true, "systemMessage": "Flow state file exists and valid"}'
+  sync_resume_recovery_state
+  emit_success "Flow state file exists and valid"
   exit 0
 fi
 
 initialize_state
+sync_resume_recovery_state
 
-echo "{\"continue\": true, \"systemMessage\": \"Flow state initialized at $STATE_FILE\"}"
+emit_success "Flow state initialized at $STATE_FILE"
 exit 0

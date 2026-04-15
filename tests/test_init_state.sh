@@ -38,6 +38,40 @@ assert_backup_matches_original() {
   }
 }
 
+write_resume_candidate_state() {
+  local file="$1"
+  write_v2_state "$file"
+  jq '
+    .current_phase = "planning"
+    | .planning.plan_written = true
+    | .workflow.active = true
+    | .workflow.activated_by = "manual-control"
+    | .workflow.activated_at = "2026-04-15T10:00:00Z"
+    | .task_flow.active_task_id = "task-001"
+    | .task_flow.active_packet_role = "implementer"
+    | .task_flow.last_dispatch_at = "2026-04-15T10:10:00Z"
+    | .review.tasks["task-001"] = {
+        "spec_review_passed": false,
+        "code_review_passed": false
+      }
+    | .tdd.test_files_created = ["tests/example.test.sh"]
+  ' "$file" > "$file.tmp"
+  mv "$file.tmp" "$file"
+}
+
+write_clean_finished_workflow_state() {
+  local file="$1"
+  write_resume_candidate_state "$file"
+  jq '
+    .finishing.invoked = true
+    | .task_flow.active_task_id = null
+    | .task_flow.active_packet_role = null
+    | .review.tasks["task-001"].spec_review_passed = true
+    | .review.tasks["task-001"].code_review_passed = true
+  ' "$file" > "$file.tmp"
+  mv "$file.tmp" "$file"
+}
+
 export CLAUDE_PLUGIN_ROOT="$(pwd)"
 
 unset CLAUDE_PROJECT_DIR
@@ -308,6 +342,71 @@ fi
 assert_file_exists "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_backup_matches_original "$TMP_DIR/unsafe-resume-fields.original" "$SESSION_CWD/.claude/flow_state.json.bak"
 assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
+
+write_resume_candidate_state "$SESSION_CWD/.claude/flow_state.json"
+resume_output="$(printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"resume"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh)"
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'true'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.last_resume_source' '"resume"'
+printf '%s' "$resume_output" > "$TMP_DIR/resume-output.json"
+assert_json_equals "$TMP_DIR/resume-output.json" '.continue' 'true'
+assert_file_contains "$TMP_DIR/resume-output.json" '/superpowers-flow-enforcer:resume-enforcer'
+
+write_resume_candidate_state "$SESSION_CWD/.claude/flow_state.json"
+startup_output="$(printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"startup"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh)"
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.last_resume_source' 'null'
+printf '%s' "$startup_output" > "$TMP_DIR/startup-output.json"
+if grep -Fq '/superpowers-flow-enforcer:resume-enforcer' "$TMP_DIR/startup-output.json"; then
+  echo "Expected non-resume SessionStart to stay quiet about resume recovery" >&2
+  exit 1
+fi
+
+write_resume_candidate_state "$SESSION_CWD/.claude/flow_state.json"
+jq '.workflow.active = false | .resume.recovery_required = true | .resume.last_resume_source = "resume"' \
+  "$SESSION_CWD/.claude/flow_state.json" > "$SESSION_CWD/.claude/flow_state.json.tmp"
+mv "$SESSION_CWD/.claude/flow_state.json.tmp" "$SESSION_CWD/.claude/flow_state.json"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"resume"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.last_resume_source' '"resume"'
+
+write_resume_candidate_state "$SESSION_CWD/.claude/flow_state.json"
+jq '.workflow.override = "manual_off" | .resume.recovery_required = true | .resume.last_resume_source = "resume"' \
+  "$SESSION_CWD/.claude/flow_state.json" > "$SESSION_CWD/.claude/flow_state.json.tmp"
+mv "$SESSION_CWD/.claude/flow_state.json.tmp" "$SESSION_CWD/.claude/flow_state.json"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"resume"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'false'
+
+write_clean_finished_workflow_state "$SESSION_CWD/.claude/flow_state.json"
+jq '.resume.recovery_required = true | .resume.last_resume_source = "resume"' \
+  "$SESSION_CWD/.claude/flow_state.json" > "$SESSION_CWD/.claude/flow_state.json.tmp"
+mv "$SESSION_CWD/.claude/flow_state.json.tmp" "$SESSION_CWD/.claude/flow_state.json"
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"resume"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'false'
+
+write_resume_candidate_state "$SESSION_CWD/.claude/flow_state.json"
+printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"resume"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'true'
+
+printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"startup"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh >/dev/null
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'true'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.last_resume_source' '"resume"'
 
 export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 
