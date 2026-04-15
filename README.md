@@ -16,7 +16,7 @@ The plugin implements workflow-aware hooks that enforce:
 - Fresh verification evidence before completion claims
 - Systematic debugging methodology on test failures
 
-Workflow entry is explicit, not inferred from every Claude Code session. In the current implementation, entry happens when the session records a skip request, when the user explicitly says `激活 superpowers enforcer` / `activate superpowers enforcer`, or when Claude writes canonical superpowers artifacts under `docs/superpowers/specs/*.md` or `docs/superpowers/plans/*.md` within the current project scope. That automatic path-based entry keeps the root-level canonical paths and also recognizes subtree forms such as `packages/foo/docs/superpowers/specs/*.md`, while excluding trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata directories.
+Workflow entry is explicit, not inferred from every Claude Code session. In the current implementation, entry happens when the session records a skip request, when the user explicitly says a supported manual entry command such as `开启 enforcer` / `enable enforcer` or the long-form compatibility prompts `激活 superpowers enforcer` / `activate superpowers enforcer`, or when Claude writes canonical superpowers artifacts under `docs/superpowers/specs/*.md` or `docs/superpowers/plans/*.md` within the current project scope. That automatic path-based entry keeps the root-level canonical paths and also recognizes subtree forms such as `packages/foo/docs/superpowers/specs/*.md`, while excluding trees like `.git`, `.worktrees`, `node_modules`, `vendor`, `.simulation`, and fixture/testdata directories.
 
 `PreToolUse/Bash` only runs its active gate when `workflow.active == true`. If the workflow is not active, the hook exits silently and does nothing. When active, the gate depends on Node 18+ because it executes the vendored Bash parser runtime through Node.
 
@@ -72,7 +72,7 @@ Long-form compatibility still exists for existing habits and scripts:
 - `activate superpowers enforcer`
 - `deactivate superpowers enforcer`
 
-`启动 enforcer`, `停止 enforcer`, `start enforcer`, and `stop enforcer` are explicitly not the recommended control surface in this round. Use `disable enforcer` / `关闭 enforcer` to turn enforcement off. Do not rely on `stop` to disable enforcement.
+`启动 enforcer`, `停止 enforcer`, `start enforcer`, and `stop enforcer` are NOT SUPPORTED in this round. Use `disable enforcer` / `关闭 enforcer` to turn enforcement off. Do not rely on `stop` to disable enforcement.
 
 ## Hook System
 
@@ -246,7 +246,7 @@ The plugin references these superpowers skills:
 
 **Blocked unexpectedly**: Check state file for current phase status. May need to complete earlier phase.
 
-**Workflow gate not applying**: Confirm the session has actually entered the superpowers workflow, for example through a skip request, by saying `激活 superpowers enforcer` / `activate superpowers enforcer`, or by writing a canonical workflow artifact under either `docs/superpowers/specs|plans/*.md` at the root or the same canonical path inside the current project subtree.
+**Workflow gate not applying**: Confirm the session has actually entered the superpowers workflow, for example through a skip request, by saying a supported manual entry command such as `开启 enforcer` / `enable enforcer` or the long-form compatibility prompts `激活 superpowers enforcer` / `activate superpowers enforcer`, or by writing a canonical workflow artifact under either `docs/superpowers/specs|plans/*.md` at the root or the same canonical path inside the current project subtree.
 
 **Resumed unfinished workflow is blocked**: Run `/superpowers-flow-enforcer:resume-enforcer` first. Until recovery clears `resume.recovery_required`, do not start new edits or Agent dispatch. Recovery planning context is read from `.planning-with-files/`.
 
