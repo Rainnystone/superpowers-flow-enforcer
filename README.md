@@ -165,11 +165,11 @@ Pause handling is exact-command based: only those supported commands set `interr
 
 When you resume an unfinished workflow, run `/superpowers-flow-enforcer:resume-enforcer` before any new edits or Agent dispatch. The recovery handshake is part of resuming work, not an optional cleanup step.
 
-Repo-specific recovery planning records live under `.planning-with-files/`:
+Recovery planning context follows `planning-with-files` conventions:
 
-- `.planning-with-files/task_plan.md`
-- `.planning-with-files/progress.md`
-- `.planning-with-files/findings.md`
+- First look for root-level `task_plan.md`, `progress.md`, and `findings.md`
+- If those files do not exist, `.planning-with-files/task_plan.md`, `.planning-with-files/progress.md`, and `.planning-with-files/findings.md` remain a compatibility fallback for this repo
+- If neither location exists, recovery continues from workflow state plus git context instead of failing
 
 State tracking for resumed workflows includes:
 
@@ -255,7 +255,7 @@ The plugin references these superpowers skills:
 
 **Workflow gate not applying**: Confirm the session has actually entered the superpowers workflow, for example through a skip request, by saying a supported manual entry command such as `开启 enforcer` / `enable enforcer` or the long-form compatibility prompts `激活 superpowers enforcer` / `activate superpowers enforcer`, or by writing a canonical workflow artifact under either `docs/superpowers/specs|plans/*.md` at the root or the same canonical path inside the current project subtree.
 
-**Resumed unfinished workflow is blocked**: Run `/superpowers-flow-enforcer:resume-enforcer` first. Until recovery clears `resume.recovery_required`, do not start new edits or Agent dispatch. Recovery planning context is read from `.planning-with-files/`.
+**Resumed unfinished workflow is blocked**: Run `/superpowers-flow-enforcer:resume-enforcer` first. Until recovery clears `resume.recovery_required`, do not start new edits or Agent dispatch. Recovery reads root-level planning-with-files records first and only falls back to `.planning-with-files/` when needed.
 
 **Bash gate says Node is required**: Install Node 18+ or make `node` available on `PATH`. The active Bash gate runs the vendored parser runtime through Node.
 

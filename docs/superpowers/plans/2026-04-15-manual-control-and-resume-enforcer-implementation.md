@@ -21,7 +21,7 @@ Do not widen this implementation into:
 3. Bash write-equivalence with `Edit|Write`
 4. heuristic parsing of free-form recovery intent
 5. heuristic parsing of broad natural-language interrupt intent
-6. making root-level `task_plan.md` / `progress.md` / `findings.md` a new canonical source for this repo
+6. adding any new planning-file directory requirement that conflicts with upstream `planning-with-files` conventions
 
 ## AGENTS Task-Splitting Rules
 
@@ -559,9 +559,9 @@ On success it must merge:
 Create `skills/resume-enforcer/SKILL.md` so the manual workflow:
 
 1. reads `.claude/flow_state.json`
-2. reads `.planning-with-files/task_plan.md`
-3. reads `.planning-with-files/progress.md`
-4. reads `.planning-with-files/findings.md` only when needed
+2. reads root-level `task_plan.md`, `progress.md`, and `findings.md` first when those files exist
+3. falls back to `.planning-with-files/task_plan.md`, `.planning-with-files/progress.md`, and `.planning-with-files/findings.md` only when the root-level files do not exist
+4. continues recovery from state plus git context when neither planning location exists
 5. runs `git status --short`
 6. optionally runs `git diff --stat`
 7. emits a structured recovery summary with:
@@ -710,14 +710,14 @@ In all three docs, update the command guidance so:
 5. `stop` / `暂停` remain interrupt vocabulary, not enforcer shutdown vocabulary
 6. resumed unfinished workflows must run `/superpowers-flow-enforcer:resume-enforcer` before new edits or agent dispatch
 7. state tracking now includes `resume.recovery_required`, `resume.recovery_completed_at`, and `resume.last_resume_source`
-8. the repo-specific planning records for recovery live under `.planning-with-files/`
+8. recovery planning records read root-level `task_plan.md` / `progress.md` / `findings.md` first and use `.planning-with-files/` only as a compatibility fallback
 
 - [ ] **Step 2: Verify the docs mention the new runtime surface**
 
 Run:
 
 ```bash
-rg -n '开启 enforcer|关闭 enforcer|enable enforcer|disable enforcer|/superpowers-flow-enforcer:resume-enforcer|resume\\.recovery_required|\\.planning-with-files/' README.md README_cn.md CLAUDE.md skills/resume-enforcer/SKILL.md
+rg -n '开启 enforcer|关闭 enforcer|enable enforcer|disable enforcer|/superpowers-flow-enforcer:resume-enforcer|resume\\.recovery_required|task_plan\\.md|\\.planning-with-files/' README.md README_cn.md CLAUDE.md skills/resume-enforcer/SKILL.md
 ```
 
 Expected: each concept is present in the correct file.

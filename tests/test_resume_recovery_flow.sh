@@ -73,16 +73,16 @@ fi
 assert_file_exists "$SKILL_FILE"
 assert_file_contains_all "$SKILL_FILE" \
   ".claude/flow_state.json" \
-  ".planning-with-files/task_plan.md" \
-  ".planning-with-files/progress.md" \
-  ".planning-with-files/findings.md" \
+  "If any of \`task_plan.md\`, \`progress.md\`, or \`findings.md\` exist at the project root, read the root-level planning files that exist." \
+  "Only if none of those root-level planning files exist, read \`.planning-with-files/task_plan.md\`, \`.planning-with-files/progress.md\`, and \`.planning-with-files/findings.md\` when present." \
+  "If neither planning location exists, continue recovery using state plus git context." \
   "git status --short" \
   "git diff --stat" \
   "current phase" \
   "open task / review state" \
   "last confirmed progress point" \
   "next required action" \
-  'bash scripts/record-resume-state.sh completed resume'
+  'bash "${CLAUDE_PLUGIN_ROOT}/scripts/record-resume-state.sh" completed resume'
 
 bash scripts/update-state.sh --jq '.resume.recovery_required = true | .resume.recovery_completed_at = null | .resume.last_resume_source = "resume"' >/dev/null
 bash scripts/record-resume-state.sh completed resume

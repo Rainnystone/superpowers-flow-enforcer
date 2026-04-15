@@ -164,11 +164,11 @@ PreToolUse hook 执行 TDD 铁律：
 
 如果是恢复一个未完成 workflow，必须先运行 `/superpowers-flow-enforcer:resume-enforcer`，然后才能开始新的编辑或新的 Agent 派发。这一步是恢复流程的一部分，不是可选补救。
 
-仓库级恢复规划记录放在 `.planning-with-files/`：
+恢复时的规划记录遵循 `planning-with-files` 的默认约定：
 
-- `.planning-with-files/task_plan.md`
-- `.planning-with-files/progress.md`
-- `.planning-with-files/findings.md`
+- 优先读取项目根目录下的 `task_plan.md`、`progress.md`、`findings.md`
+- 如果根目录没有，再兼容读取 `.planning-with-files/task_plan.md`、`.planning-with-files/progress.md`、`.planning-with-files/findings.md`
+- 如果两边都没有，恢复流程继续使用 workflow state 和 git 上下文，不会因此报错
 
 恢复相关状态字段包括：
 
@@ -256,7 +256,7 @@ vendor/
 
 **为什么 workflow 门禁没生效**: 先确认当前会话是否真的进入了 superpowers workflow，比如是否记录了 skip 请求、是否明确输入了受支持的手动进入命令 `开启 enforcer` / `enable enforcer`，或者兼容保留的长命令 `激活 superpowers enforcer` / `activate superpowers enforcer`，又或者是否写入了当前项目作用域内的 canonical `docs/superpowers/specs/*.md` / `docs/superpowers/plans/*.md`。
 
-**恢复中的未完成 workflow 被拦住了**: 先运行 `/superpowers-flow-enforcer:resume-enforcer`。只要 `resume.recovery_required` 还没有清掉，就不要开始新的编辑或新的 Agent 派发。恢复时会读取 `.planning-with-files/` 下的规划记录。
+**恢复中的未完成 workflow 被拦住了**: 先运行 `/superpowers-flow-enforcer:resume-enforcer`。只要 `resume.recovery_required` 还没有清掉，就不要开始新的编辑或新的 Agent 派发。恢复时会先读根目录规划文件，必要时才 fallback 到 `.planning-with-files/`。
 
 **Bash gate 提示需要 Node**: 安装 Node 18+，或者确保 `node` 在 `PATH` 里。激活中的 Bash gate 会通过 Node 运行 vendored 的 parser runtime。
 

@@ -444,13 +444,19 @@ For this round that means:
 
 ### Canonical planning-record location for this round
 
-For this repository, the recovery skill must read planning-with-files records only from the project-local directory:
+The recovery skill should follow `planning-with-files` conventions first:
+
+1. root-level `task_plan.md`
+2. root-level `progress.md`
+3. root-level `findings.md`
+
+Compatibility fallback remains allowed for this repository if those files do not exist:
 
 1. `.planning-with-files/task_plan.md`
 2. `.planning-with-files/progress.md`
 3. `.planning-with-files/findings.md`
 
-This round must not treat root-level `task_plan.md`, `progress.md`, or `findings.md` as the canonical recovery source for this repo.
+If neither location exists, recovery should continue from workflow state plus git context rather than failing or creating planning files automatically.
 
 ### Invocation model
 
@@ -461,13 +467,15 @@ This skill should be manual-first, not automatically invoked by the model.
 The skill must:
 
 1. read `.claude/flow_state.json`
-2. read `.planning-with-files/task_plan.md` if present
-3. read `.planning-with-files/progress.md` if present
-4. read `.planning-with-files/findings.md` only when needed for reconstruction
-5. inspect the current working tree using:
+2. read root-level `task_plan.md` if present
+3. read root-level `progress.md` if present
+4. read root-level `findings.md` only when needed for reconstruction
+5. otherwise fall back to `.planning-with-files/task_plan.md`, `.planning-with-files/progress.md`, and `.planning-with-files/findings.md`
+6. if neither planning location exists, continue recovery without treating that as an error
+7. inspect the current working tree using:
    - `git status --short`
    - and, when needed, `git diff --stat`
-6. produce a structured recovery summary that tells Claude:
+8. produce a structured recovery summary that tells Claude:
    - current inferred workflow phase
    - current open task and review state, if any
    - the last confirmed progress point
