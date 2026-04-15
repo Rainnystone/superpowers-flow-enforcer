@@ -12,6 +12,12 @@ export CLAUDE_PLUGIN_ROOT="$(pwd)"
 
 mkdir -p "$CLAUDE_PROJECT_DIR/.claude"
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+jq '
+  .task_flow.active_task_id = "task-001"
+  | .task_flow.active_packet_role = "code-reviewer"
+  | .task_flow.last_dispatch_at = "2026-04-15T00:00:00Z"
+' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 
 bash scripts/record-spec-state.sh self-review pass
 bash scripts/record-spec-state.sh user-approval pass
@@ -29,6 +35,9 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstorming
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.review.tasks["task-001"].spec_review_passed' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.review.tasks["task-001"].code_review_passed' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.finishing.invoked' 'true'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.active_task_id' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.active_packet_role' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.task_flow.last_dispatch_at' '"2026-04-15T00:00:00Z"'
 
 if jq -e '.review.tasks | has("")' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/dev/null 2>&1; then
   echo 'Expected flow_state.json not to contain an empty review task key' >&2

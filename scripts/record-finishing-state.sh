@@ -9,5 +9,11 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 
-jq -n '{finishing:{invoked:true}}' \
+jq -n '{
+  finishing:{invoked:true},
+  task_flow:{
+    active_task_id:null,
+    active_packet_role:null
+  }
+}' \
   | bash "$PLUGIN_ROOT/scripts/update-state.sh" --merge >/dev/null
