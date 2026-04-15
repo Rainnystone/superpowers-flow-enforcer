@@ -72,6 +72,17 @@ write_clean_finished_workflow_state() {
   mv "$file.tmp" "$file"
 }
 
+write_active_no_progress_state() {
+  local file="$1"
+  write_v2_state "$file"
+  jq '
+    .workflow.active = true
+    | .workflow.activated_by = "manual-control"
+    | .workflow.activated_at = "2026-04-15T10:00:00Z"
+  ' "$file" > "$file.tmp"
+  mv "$file.tmp" "$file"
+}
+
 export CLAUDE_PLUGIN_ROOT="$(pwd)"
 
 unset CLAUDE_PROJECT_DIR
@@ -353,6 +364,18 @@ printf '%s' "$resume_output" > "$TMP_DIR/resume-output.json"
 assert_json_equals "$TMP_DIR/resume-output.json" '.continue' 'true'
 assert_file_contains "$TMP_DIR/resume-output.json" '/superpowers-flow-enforcer:resume-enforcer'
 
+write_active_no_progress_state "$SESSION_CWD/.claude/flow_state.json"
+resume_without_progress_output="$(printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"resume"}' "$SESSION_CWD" \
+  | bash scripts/init-state.sh)"
+
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'false'
+assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.last_resume_source' '"resume"'
+printf '%s' "$resume_without_progress_output" > "$TMP_DIR/resume-without-progress-output.json"
+if grep -Fq '/superpowers-flow-enforcer:resume-enforcer' "$TMP_DIR/resume-without-progress-output.json"; then
+  echo "Expected resume without workflow progress to stay quiet about recovery" >&2
+  exit 1
+fi
+
 write_resume_candidate_state "$SESSION_CWD/.claude/flow_state.json"
 startup_output="$(printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"startup"}' "$SESSION_CWD" \
   | bash scripts/init-state.sh)"
@@ -403,10 +426,11 @@ printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"resume"}' "$SESSI
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'true'
 
 printf '{"hook_event_name":"SessionStart","cwd":"%s","source":"startup"}' "$SESSION_CWD" \
-  | bash scripts/init-state.sh >/dev/null
+  | bash scripts/init-state.sh > "$TMP_DIR/startup-after-required-output.json"
 
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.recovery_required' 'true'
 assert_json_equals "$SESSION_CWD/.claude/flow_state.json" '.resume.last_resume_source' '"resume"'
+assert_file_contains "$TMP_DIR/startup-after-required-output.json" '/superpowers-flow-enforcer:resume-enforcer'
 
 export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 

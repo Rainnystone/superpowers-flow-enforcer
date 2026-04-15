@@ -171,7 +171,6 @@ sync_resume_recovery_state() {
 }
 
 resume_hint_required() {
-  [ "$SESSION_START_SOURCE" = "resume" ] || return 1
   jq -e '.resume.recovery_required == true' "$STATE_FILE" >/dev/null 2>&1
 }
 
