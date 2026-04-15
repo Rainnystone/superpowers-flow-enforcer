@@ -551,156 +551,58 @@ assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
-POSITIVE_STOP_INTERRUPT_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop for now"}' "$MANUAL_PROMPT_PROJECT" \
+POSITIVE_STOP_TASK_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"stop task"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-if [ -n "$POSITIVE_STOP_INTERRUPT_OUTPUT" ]; then
-  echo "Expected real stop pause prompt to be silent allow" >&2
+if [ -n "$POSITIVE_STOP_TASK_OUTPUT" ]; then
+  echo "Expected exact stop task command to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop for now"'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"stop task"'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
 
-POSITIVE_STOP_HERE_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop here and continue tomorrow"}' "$MANUAL_PROMPT_PROJECT" \
+POSITIVE_PAUSE_TASK_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"pause task"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-if [ -n "$POSITIVE_STOP_HERE_OUTPUT" ]; then
-  echo "Expected stop here pause prompt to be silent allow" >&2
+if [ -n "$POSITIVE_PAUSE_TASK_OUTPUT" ]; then
+  echo "Expected exact pause task command to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop here and continue tomorrow"'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"pause task"'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
 
-POSITIVE_STOP_AFTER_STEP_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop after this step"}' "$MANUAL_PROMPT_PROJECT" \
+POSITIVE_STOP_TASK_CN_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"停止任务"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-if [ -n "$POSITIVE_STOP_AFTER_STEP_OUTPUT" ]; then
-  echo "Expected stop after this step prompt to be silent allow" >&2
+if [ -n "$POSITIVE_STOP_TASK_CN_OUTPUT" ]; then
+  echo "Expected exact Chinese stop task command to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop after this step"'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"停止任务"'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
 
-POSITIVE_STOP_DO_NOT_CONTINUE_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop and do not continue"}' "$MANUAL_PROMPT_PROJECT" \
+POSITIVE_PAUSE_TASK_CN_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"暂停任务"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-if [ -n "$POSITIVE_STOP_DO_NOT_CONTINUE_OUTPUT" ]; then
-  echo "Expected stop and do not continue prompt to be silent allow" >&2
+if [ -n "$POSITIVE_PAUSE_TASK_CN_OUTPUT" ]; then
+  echo "Expected exact Chinese pause task command to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop and do not continue"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
-
-write_v2_state "$STATE_FILE"
-
-POSITIVE_STOP_IF_TOO_LONG_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop if this takes too long"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$POSITIVE_STOP_IF_TOO_LONG_OUTPUT" ]; then
-  echo "Expected stop if this takes too long prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop if this takes too long"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
-
-write_v2_state "$STATE_FILE"
-
-POSITIVE_STOP_AND_EXPLAIN_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop and explain the current status"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$POSITIVE_STOP_AND_EXPLAIN_OUTPUT" ]; then
-  echo "Expected stop and explain prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop and explain the current status"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
-
-write_v2_state "$STATE_FILE"
-
-POSITIVE_STOP_AND_TELL_ME_WHY_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop after this step and tell me why"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$POSITIVE_STOP_AND_TELL_ME_WHY_OUTPUT" ]; then
-  echo "Expected stop and tell me why prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop after this step and tell me why"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
-
-write_v2_state "$STATE_FILE"
-
-POSITIVE_STOP_IF_NOT_MEANINGFUL_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop if the results are not meaningful"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$POSITIVE_STOP_IF_NOT_MEANINGFUL_OUTPUT" ]; then
-  echo "Expected stop if not meaningful prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop if the results are not meaningful"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
-
-write_v2_state "$STATE_FILE"
-
-POSITIVE_STOP_SEMANTICS_REVIEW_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"stop semantics review for now"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$POSITIVE_STOP_SEMANTICS_REVIEW_OUTPUT" ]; then
-  echo "Expected stop semantics review prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"stop semantics review for now"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
-
-write_v2_state "$STATE_FILE"
-
-POSITIVE_PLEASE_STOP_SEMANTICS_REVIEW_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please stop semantics review for now"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$POSITIVE_PLEASE_STOP_SEMANTICS_REVIEW_OUTPUT" ]; then
-  echo "Expected please stop semantics review prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please stop semantics review for now"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
-
-write_v2_state "$STATE_FILE"
-
-POSITIVE_DISABLE_STOP_SEMANTICS_REVIEW_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer: stop semantics review for now"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$POSITIVE_DISABLE_STOP_SEMANTICS_REVIEW_OUTPUT" ]; then
-  echo "Expected disable enforcer stop semantics review prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"disable enforcer: stop semantics review for now"'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' '"暂停任务"'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
 
 write_v2_state "$STATE_FILE"
@@ -727,9 +629,9 @@ if [ -n "$MIXED_EXPLAIN_THEN_STOP_OUTPUT" ]; then
   echo "Expected mixed explain-then-stop prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please explain \"stop\" semantics, then stop for now"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
@@ -741,9 +643,9 @@ if [ -n "$SAME_CLAUSE_EXPLAIN_THEN_STOP_OUTPUT" ]; then
   echo "Expected same-clause explain-then-stop prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please explain \"stop\" semantics and then stop for now"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
@@ -755,9 +657,9 @@ if [ -n "$MIXED_EXPLAIN_THEN_PAUSE_OUTPUT" ]; then
   echo "Expected mixed explain-then-pause prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please explain \"stop\" semantics, then pause for now"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
@@ -769,9 +671,9 @@ if [ -n "$MIXED_DO_NOT_STOP_THEN_STOP_OUTPUT" ]; then
   echo "Expected mixed negation-then-stop prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please do not stop yet, stop after this step"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
@@ -783,9 +685,9 @@ if [ -n "$SAME_CLAUSE_DO_NOT_STOP_THEN_STOP_OUTPUT" ]; then
   echo "Expected same-clause negation-then-stop prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'true'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' '"Please do not stop yet and then stop after this step"'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
@@ -803,125 +705,19 @@ assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
 
-NEGATIVE_CHINESE_STOP_MEANING_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"stop 是什么意思"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$NEGATIVE_CHINESE_STOP_MEANING_OUTPUT" ]; then
-  echo "Expected Chinese stop meaning prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
-
-write_v2_state "$STATE_FILE"
-
-NEGATIVE_SINGLE_QUOTED_STOP_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain '\''stop'\'' semantics"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$NEGATIVE_SINGLE_QUOTED_STOP_OUTPUT" ]; then
-  echo "Expected single-quoted stop explanation prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
-
-write_v2_state "$STATE_FILE"
-
-NEGATIVE_IF_I_SAY_STOP_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"If I say stop after this step, what happens?"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$NEGATIVE_IF_I_SAY_STOP_OUTPUT" ]; then
-  echo "Expected if-I-say-stop discussion prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
-
-write_v2_state "$STATE_FILE"
-
-NEGATIVE_DO_NOT_STOP_YET_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please do not stop yet"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$NEGATIVE_DO_NOT_STOP_YET_OUTPUT" ]; then
-  echo "Expected negated stop prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
-
-write_v2_state "$STATE_FILE"
-
-NEGATIVE_CHINESE_EXPLAIN_STOP_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"不要 stop，我是在解释这个词"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$NEGATIVE_CHINESE_EXPLAIN_STOP_OUTPUT" ]; then
-  echo "Expected Chinese explanatory stop prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
-
-write_v2_state "$STATE_FILE"
-
-NEGATIVE_WHAT_HAPPENS_STOP_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"What happens if I say stop?"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$NEGATIVE_WHAT_HAPPENS_STOP_OUTPUT" ]; then
-  echo "Expected stop discussion question prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
-
-write_v2_state "$STATE_FILE"
-
-NEGATIVE_IF_WRITE_STOP_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"If I write stop here, what happens?"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$NEGATIVE_IF_WRITE_STOP_OUTPUT" ]; then
-  echo "Expected conditional stop discussion prompt to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
-assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
-assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
-
-write_v2_state "$STATE_FILE"
-jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt" | .workflow.activated_at = "2026-04-15T00:00:00Z"' "$STATE_FILE" > "$STATE_FILE.tmp"
-mv "$STATE_FILE.tmp" "$STATE_FILE"
-
-NEGATIVE_EXPLAIN_DISABLE_STOP_SEMANTICS_OUTPUT="$(
+NEGATIVE_EXPLAIN_DISABLE_STOP_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain disable enforcer, stop semantics"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-if [ -n "$NEGATIVE_EXPLAIN_DISABLE_STOP_SEMANTICS_OUTPUT" ]; then
+if [ -n "$NEGATIVE_EXPLAIN_DISABLE_STOP_OUTPUT" ]; then
   echo "Expected explanatory disable-enforcer stop prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_at' '"2026-04-15T00:00:00Z"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
-jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt" | .workflow.activated_at = "2026-04-15T00:00:00Z"' "$STATE_FILE" > "$STATE_FILE.tmp"
-mv "$STATE_FILE.tmp" "$STATE_FILE"
 
 NEGATIVE_DISABLE_STOP_SEMANTICS_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please disable enforcer: stop for now semantics"}' "$MANUAL_PROMPT_PROJECT" \
@@ -931,17 +727,11 @@ if [ -n "$NEGATIVE_DISABLE_STOP_SEMANTICS_OUTPUT" ]; then
   echo "Expected disable-enforcer stop semantics prompt to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_at' '"2026-04-15T00:00:00Z"'
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
 
 write_v2_state "$STATE_FILE"
-jq '.workflow.active = true | .workflow.override = "manual_on" | .workflow.activated_by = "manual_prompt" | .workflow.activated_at = "2026-04-15T00:00:00Z"' "$STATE_FILE" > "$STATE_FILE.tmp"
-mv "$STATE_FILE.tmp" "$STATE_FILE"
 
 NEGATIVE_EXPLAIN_DISABLE_STOP_SEMICOLON_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain disable enforcer; stop semantics"}' "$MANUAL_PROMPT_PROJECT" \
@@ -951,10 +741,20 @@ if [ -n "$NEGATIVE_EXPLAIN_DISABLE_STOP_SEMICOLON_OUTPUT" ]; then
   echo "Expected explanatory disable-enforcer stop prompt with semicolon to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.workflow.override' '"manual_on"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"manual_prompt"'
-assert_json_equals "$STATE_FILE" '.workflow.activated_at' '"2026-04-15T00:00:00Z"'
+assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
+assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
+assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
+
+write_v2_state "$STATE_FILE"
+
+NEGATIVE_EXPLAIN_DISABLE_STOP_SEMANTICS_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"Please explain disable enforcer stop semantics"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$NEGATIVE_EXPLAIN_DISABLE_STOP_SEMANTICS_OUTPUT" ]; then
+  echo "Expected explanatory disable-enforcer stop prompt to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.interrupt.allowed' 'false'
 assert_json_equals "$STATE_FILE" '.interrupt.reason' 'null'
 assert_json_equals "$STATE_FILE" '.interrupt.keywords_detected' '[]'
