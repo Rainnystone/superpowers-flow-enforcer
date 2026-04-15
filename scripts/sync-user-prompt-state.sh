@@ -246,21 +246,49 @@ record_interrupt_if_requested() {
 }
 
 is_interrupt_stop_discussion_prompt() {
-  if ! echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
-    return 1
-  fi
+  local clauses=()
+  local clause
 
-  if echo "$PROMPT_LC" | grep -qE '["'"'"'`][[:space:]]*stop[[:space:]]*["'"'"'`]' ; then
-    return 0
-  fi
+  while IFS= read -r clause; do
+    clause="$(normalize_prompt_text "$clause")"
+    if [ -n "$clause" ]; then
+      clauses+=("$clause")
+    fi
+  done < <(split_manual_control_clauses "$PROMPT_LC")
 
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])(do[[:space:]]+not|don.?t|dont|不要|别)[[:space:]]+stop([[:space:][:punct:]]|$)'; then
-    return 0
-  fi
+  local clause_index
+  for clause_index in "${!clauses[@]}"; do
+    clause="${clauses[$clause_index]}"
 
-  if echo "$PROMPT_LC" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+happens|what[[:space:]]+if|what[[:space:]]+does|what[[:space:]]+is|how[[:space:]]+does|how[[:space:]]+about)([[:space:][:punct:]]|$)'; then
-    return 0
-  fi
+    if ! echo "$clause" | grep -qE '(^|[^[:alpha:]])stop([[:space:][:punct:]]|$)'; then
+      continue
+    fi
+
+    if echo "$clause" | grep -qE '["'"'"'`][[:space:]]*stop[[:space:]]*["'"'"'`]' ; then
+      return 0
+    fi
+
+    local prefix
+    local suffix
+    prefix="$(normalize_prompt_text "${clause%%stop*}")"
+    suffix="$(normalize_prompt_text "${clause#*stop}")"
+
+    if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(do[[:space:]]+not|don.?t|dont|不要|别)([[:space:][:punct:]]|$)'; then
+      return 0
+    fi
+
+    if echo "$prefix" | grep -qE '(^|[^[:alpha:]])(explain|explanation|meaning|semantics|definition|describe|discussion|example|examples|usage|meaningful|interpret|what[[:space:]]+happens|what[[:space:]]+if|what[[:space:]]+does|what[[:space:]]+is|how[[:space:]]+does|how[[:space:]]+about|解释|说明|含义|意思|什么意思)([[:space:][:punct:]]|$)'; then
+      return 0
+    fi
+
+    if echo "$suffix" | grep -qE '^[[:space:]]*(是[[:space:]]*什么[[:space:]]*意思|的[[:space:]]*(含义|意思))([[:space:][:punct:]]|$)'; then
+      return 0
+    fi
+
+    if echo "$prefix" | grep -qE '(^|[^[:alpha:]])if[[:space:]]+i[[:space:]]+write([[:space:][:punct:]]|$)|(^|[^[:alpha:]])what[[:space:]]+happens[[:space:]]+if[[:space:]]+i[[:space:]]+say([[:space:][:punct:]]|$)'; then
+      return 0
+    fi
+  done
 
   return 1
 }
