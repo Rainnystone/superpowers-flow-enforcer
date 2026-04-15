@@ -378,6 +378,16 @@ Deterministic clear conditions for this round are:
 
 If none of those conditions hold, later `startup` or additional `resume` starts should preserve the recovery gate rather than silently dropping it.
 
+### Explicit implementation boundary for the resume trigger
+
+The implementation plan must treat the resume trigger as a narrow change to:
+
+1. `hooks/hooks.json`
+2. the `SessionStart` command-hook path
+3. the official `SessionStart` input field `source`
+
+This round must not invent a pseudo-event or transcript-based resume detector.
+
 ## E. Add a dedicated manual recovery skill
 
 Add a manual recovery skill referred to in this design as `resume-enforcer`.
@@ -392,6 +402,16 @@ For this plugin packaging model, the user-facing installed invocation should be 
 1. `/superpowers-flow-enforcer:resume-enforcer`
 
 Within this design document, `resume-enforcer` may still be used as shorthand for the skill itself. The implementation plan must plan against the concrete file boundary above and the fully qualified installed invocation surface above.
+
+### Canonical planning-record location for this round
+
+For this repository, the recovery skill must read planning-with-files records only from the project-local directory:
+
+1. `.planning-with-files/task_plan.md`
+2. `.planning-with-files/progress.md`
+3. `.planning-with-files/findings.md`
+
+This round must not treat root-level `task_plan.md`, `progress.md`, or `findings.md` as the canonical recovery source for this repo.
 
 ### Invocation model
 
@@ -446,7 +466,7 @@ The deny reason must clearly direct Claude back to the recovery skill.
 
 Representative deny text:
 
-`检测到 resumed 的未完成 superpowers workflow。先执行 /resume-enforcer 完成恢复摘要，再继续 Edit/Write/Agent。`
+`检测到 resumed 的未完成 superpowers workflow。先执行 /superpowers-flow-enforcer:resume-enforcer 完成恢复摘要，再继续 Edit/Write/Agent。`
 
 This gate is intentionally narrow:
 
@@ -547,7 +567,7 @@ This design is complete when all of the following are true:
 
 ## Open Questions
 
-1. what is the shortest real invocation surface the plugin packaging model can expose for the recovery skill in Claude Code, and should docs show the fully qualified installed name or an alias?
+None at the design level for this round.
 
 ## Recommended Next Step
 
