@@ -263,6 +263,10 @@ The plugin references these superpowers skills:
 
 **Test verification failing**: Run the actual test command and show output. Don't just claim "tests pass".
 
+**`jq: command not found` on SessionStart**: This plugin's hook scripts depend on `jq` for JSON state management. On macOS and most Linux distros `jq` is pre-installed or available via package managers (`brew install jq`, `apt install jq`). On Windows, install it with `winget install jqlang.jq` or download from [jqlang/jq releases](https://github.com/jqlang/jq/releases). After installing, restart your terminal so the new `PATH` takes effect.
+
+**`shasum: command not found` on SessionStart (Windows)**: The `init-state.sh` script uses a cross-platform hash fallback (`sha256sum` first, then `shasum -a 256`). If both are missing, ensure your Git Bash / shell environment includes GNU coreutils (`sha256sum`). This should not happen on standard Git Bash for Windows installations.
+
 ## License
 
 MIT

@@ -264,6 +264,10 @@ vendor/
 
 **测试验证失败**: 运行实际测试命令并展示输出。不要只说"tests pass"。
 
+**SessionStart 报 `jq: command not found`**: 插件的 hook 脚本依赖 `jq` 做 JSON 状态管理。macOS 和大多数 Linux 发行版通常已预装或可通过包管理器安装（`brew install jq`、`apt install jq`）。Windows 用户可执行 `winget install jqlang.jq` 或从 [jqlang/jq releases](https://github.com/jqlang/jq/releases) 下载。安装后需重启终端使新 `PATH` 生效。
+
+**SessionStart 报 `shasum: command not found`（Windows）**: `init-state.sh` 已使用跨平台 hash fallback（优先 `sha256sum`，回退 `shasum -a 256`）。如果两者都找不到，请确认你的 Git Bash / shell 环境包含 GNU coreutils（`sha256sum`）。标准的 Git Bash for Windows 安装应该自带。
+
 ## 许可证
 
 MIT
