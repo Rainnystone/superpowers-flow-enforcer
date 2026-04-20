@@ -51,7 +51,7 @@ SESSION_START_SOURCE="$(resolve_session_start_source)"
 initialize_state() {
   mkdir -p "$PROJECT_DIR/.claude"
 
-  SESSION_ID=$(date +%s | shasum -a 256 | head -c 16)
+  SESSION_ID=$(date +%s | (sha256sum 2>/dev/null || shasum -a 256) | head -c 16)
   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   jq --arg session "$SESSION_ID" \
