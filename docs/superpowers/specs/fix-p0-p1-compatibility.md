@@ -74,6 +74,30 @@ The `brainstorming` phase has a two-step gate (`spec_written` → `spec_reviewed
 - The `planning` state schema change is reflected in template, init, and migration logic
 - `plan_reviewed` defaults to `false` for fresh states, migrated v1 states, and existing v2 states that predate this field (safe via `// false` fallback in gate checks)
 
+### Goal 6: Midstream activation phase recovery
+
+When `enable enforcer` is issued mid-workstream, the enforcer currently only sets `workflow.active = true` without adjusting `current_phase`. This leaves `current_phase` at `init` even when structured state fields or canonical artifacts indicate the session has already progressed through brainstorming, planning, or implementation phases. The enforcer must recover the correct phase so that subsequent hooks enforce the right gates.
+
+**Recovery rules** (evaluated in order; first match wins):
+1. If `.finishing.invoked == true` → `current_phase = "finishing"`
+2. If `.review.tasks` is non-empty → `current_phase = "review"`
+3. If `.tdd.current_task` is non-null or `.worktree.created == true` → `current_phase = "tdd"`
+4. If `.planning.plan_written == true` → `current_phase = "planning"`
+5. If `.brainstorming.spec_written == true` → `current_phase = "brainstorming"`
+6. Otherwise → keep `current_phase = "init"`
+
+**Fallback rules** (used only when state file lacks the relevant field):
+- If `docs/superpowers/plans/*.md` exists in the project → `current_phase = "planning"`
+- If `docs/superpowers/specs/*.md` exists in the project → `current_phase = "brainstorming"`
+
+**Acceptance criteria**:
+- `enable enforcer` sets `workflow.active = true` AND adjusts `current_phase` based on the recovery rules above
+- Recovery is based solely on structured state fields first, then deterministic artifacts as fallback
+- Recovery does not infer phase from natural language, user prompts, or assistant prose
+- When no state fields or artifacts indicate progress, `current_phase` stays at `init`
+- The recovery logic runs inside `sync-user-prompt-state.sh` during the `is_manual_activate_exact_command` handler
+- Existing `disable enforcer` behavior is unaffected
+
 ## Non-Goals
 
 - No changes to the TDD enforcement logic or subagent internal behavior (as discussed, subagents self-enforce TDD)
@@ -81,10 +105,7 @@ The `brainstorming` phase has a two-step gate (`spec_written` → `spec_reviewed
 - No `if` field optimization on Bash matcher (out of scope for this fix)
 - No changes to `sha256sum || shasum` fallback logic (already verified safe)
 - No changes to plugin dev mode or hook lifecycle (platform limitation, not fixable in this repo)
-- No midstream activation phase recovery rules. If `enable enforcer` is issued mid-workstream, the current behavior trusts the existing `.claude/flow_state.json` as-is. Any future phase recovery must obey this constraint:
-  - **State first**: recovery decisions must be based solely on structured state fields (e.g., `.brainstorming.spec_written`, `.brainstorming.spec_reviewed`, `.planning.plan_written`, `.planning.plan_reviewed`, `.worktree.created`, `.worktree.baseline_verified`, `.resume.recovery_required`).
-  - **Deterministic artifacts second**: canonical file existence (`docs/superpowers/specs/*.md`, `docs/superpowers/plans/*.md`) may be used as a fallback only when the state file lacks the relevant field.
-  - **No natural-language inference**: workflow phase must never be inferred from free-form user prompts, assistant prose, or keyword matching. This prevents an unbounded keyword-enumeration problem and keeps recovery logic finite, auditable, and testable.
+- No midstream activation natural-language inference. Phase recovery after `enable enforcer` must never infer phase from free-form user prompts, assistant prose, or keyword matching. This prevents an unbounded keyword-enumeration problem and keeps recovery logic finite, auditable, and testable.
 
 ## Design
 
@@ -202,11 +223,124 @@ The `brainstorming` phase already models a review gate with `.brainstorming.spec
    fi
    ```
 
-**`plan_reviewed` write semantics** — The field is initialized to `false` by the canonical plan write hook. Setting it to `true` follows the same manual-marking pattern as `brainstorming.spec_reviewed` (which is set via `record-review-state.sh` or equivalent manual state update). No new automation script is introduced in this fix; the model or user marks plan review completion explicitly, just as they do for spec review. This preserves consistency with the existing `spec_reviewed` pattern without expanding scope.
+**`plan_reviewed` write semantics** — The field is initialized to `false` by the canonical plan write hook. Setting it to `true` uses a dedicated script `scripts/record-plan-state.sh` that mirrors the existing `scripts/record-spec-state.sh` pattern. Usage:
+
+```bash
+# Mark plan review as passed
+record-plan-state.sh plan-reviewed pass
+
+# Mark plan review as failed (resets to false)
+record-plan-state.sh plan-reviewed fail
+```
+
+The script writes `{planning:{plan_reviewed:<value>}}` via `update-state.sh --merge`, identical to how `record-spec-state.sh` writes `{brainstorming:{spec_reviewed:<value>}}`. This keeps the write entry explicit, auditable, and consistent with the brainstorming gate pattern.
 
 This preserves the existing worktree gate behavior while inserting a plan review intermediate state. The plan review → fix → re-review cycle is now possible because re-editing the plan while `plan_reviewed == false` continues to block with the same plan-review message rather than jumping ahead to worktree.
 
 **`init-state.sh` / `migrate-state.sh`** — ensure the new field is bootstrapped with default `false`.
+
+**New script: `scripts/record-plan-state.sh`** — mirrors `scripts/record-spec-state.sh`:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+  echo 'Usage: record-plan-state.sh plan-reviewed pass|fail' >&2
+  exit 1
+fi
+
+ACTION="$1"
+RESULT="$2"
+
+case "$ACTION" in
+  plan-reviewed) FIELD="plan_reviewed" ;;
+  *) echo "Unsupported plan action: $ACTION" >&2; exit 1 ;;
+esac
+
+case "$RESULT" in
+  pass) VALUE=true ;;
+  fail) VALUE=false ;;
+  *) echo "Unsupported result: $RESULT" >&2; exit 1 ;;
+esac
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
+jq -n --argjson value "$VALUE" --arg field "$FIELD" '{planning:{($field):$value}}' \
+  | bash "$PLUGIN_ROOT/scripts/update-state.sh" --merge >/dev/null
+```
+
+Files to modify for P4:
+- `templates/flow_state.json.tmpl` — add `plan_reviewed` field
+- `scripts/sync-post-tool-state.sh` — set `plan_reviewed = false` on write; split gate
+- `scripts/migrate-state.sh` — bootstrap default
+- Create: `scripts/record-plan-state.sh` — write entry for `plan_reviewed`
+
+### P5: Midstream activation phase recovery
+
+The activation handler in `sync-user-prompt-state.sh` (lines 228-242) currently sets `workflow.active = true` without adjusting `current_phase`. When `enable enforcer` is issued after work has already begun (e.g., spec written, plan written, worktree created), the enforcer stays at `current_phase = "init"`, causing all subsequent phase-aware hooks to enforce the wrong gates.
+
+**`sync-user-prompt-state.sh` change** — after setting `workflow.active = true`, add phase recovery logic:
+
+```bash
+if is_manual_activate_exact_command "$PROMPT_LC"; then
+  RECOVERED_PHASE="$(recover_phase_from_state "$STATE_FILE")"
+  jq --arg now "$NOW_UTC" --arg phase "$RECOVERED_PHASE" '
+    .workflow.active = true
+    | .workflow.override = "manual_on"
+    | .workflow.activated_by = "manual_prompt"
+    | .workflow.activated_at = $now
+    | .workflow.deactivated_by = null
+    | .workflow.deactivated_at = null
+    | .interrupt.allowed = false
+    | .interrupt.reason = null
+    | .interrupt.keywords_detected = []
+    | .current_phase = $phase
+  ' "$STATE_FILE" > "$tmp_file"
+  mv "$tmp_file" "$STATE_FILE"
+  exit 0
+fi
+```
+
+Where `recover_phase_from_state` is a new function:
+
+```bash
+recover_phase_from_state() {
+  local state_file="$1"
+
+  # State-first recovery: check structured fields in priority order
+  if jq -e '.finishing.invoked == true' "$state_file" >/dev/null 2>&1; then
+    echo "finishing"; return 0
+  fi
+  if jq -e '.review.tasks | length > 0' "$state_file" >/dev/null 2>&1; then
+    echo "review"; return 0
+  fi
+  if jq -e '.tdd.current_task != null or .worktree.created == true' "$state_file" >/dev/null 2>&1; then
+    echo "tdd"; return 0
+  fi
+  if jq -e '.planning.plan_written == true' "$state_file" >/dev/null 2>&1; then
+    echo "planning"; return 0
+  fi
+  if jq -e '.brainstorming.spec_written == true' "$state_file" >/dev/null 2>&1; then
+    echo "brainstorming"; return 0
+  fi
+
+  # Artifact fallback: check canonical file existence
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  if compgen -G "$project_dir/docs/superpowers/plans/*.md" >/dev/null 2>&1; then
+    echo "planning"; return 0
+  fi
+  if compgen -G "$project_dir/docs/superpowers/specs/*.md" >/dev/null 2>&1; then
+    echo "brainstorming"; return 0
+  fi
+
+  echo "init"
+}
+```
+
+Files to modify for P5:
+- `scripts/sync-user-prompt-state.sh` — add `recover_phase_from_state` function and integrate into activation handler
 
 ### Windows Compatibility Note
 
@@ -223,8 +357,9 @@ Git Bash for Windows (based on MSYS2) supports `bash --norc`. The `--norc` flag 
 
 ### P1 Tests
 
-1. **Environment test**: Create a fake `~/.bashrc` with `echo "pollution"`, run any hook script via the `hooks.json` command pattern, verify stdout contains only valid JSON
-2. **Cross-platform check**: Verify `bash --norc` is available on the target platform (macOS done, Windows Git Bash assumed available)
+1. **Behavioral test**: Create a fake rcfile with `echo "PROFILE_POLLUTION"`, use `bash --rcfile <fake-rcfile> -i -c 'echo ...'` to prove pollution reaches stdout, then use `bash --norc --rcfile <fake-rcfile> -i -c 'echo ...'` to prove `--norc` suppresses it and output is valid JSON
+2. **Config test**: Verify `hooks.json` contains `bash --norc` in all command entries
+3. **Cross-platform check**: Verify `bash --norc` is available on the target platform (macOS done, Windows Git Bash assumed available)
 
 ### P2 Tests
 
@@ -252,6 +387,17 @@ Git Bash for Windows (based on MSYS2) supports `bash --norc`. The `--norc` flag 
 4. **Schema test**: Verify `templates/flow_state.json.tmpl` contains `planning.plan_reviewed` with default `false`
 5. **Migration test**: Verify existing state without `planning.plan_reviewed` behaves as `false` (jq `// false` fallback)
 
+### P5 Tests
+
+1. **Unit test**: State with `planning.plan_written = true`, `current_phase = "init"`, issue `enable enforcer`, verify `current_phase` becomes `"planning"`
+2. **Unit test**: State with `brainstorming.spec_written = true` only, verify recovery sets `current_phase = "brainstorming"`
+3. **Unit test**: State with `worktree.created = true`, verify recovery sets `current_phase = "tdd"`
+4. **Unit test**: State with `review.tasks` non-empty, verify recovery sets `current_phase = "review"`
+5. **Unit test**: State with `finishing.invoked = true`, verify recovery sets `current_phase = "finishing"`
+6. **Unit test**: Empty state (all defaults), verify recovery keeps `current_phase = "init"`
+7. **Artifact fallback test**: State with no structured fields but `docs/superpowers/specs/*.md` exists, verify recovery sets `current_phase = "brainstorming"`
+8. **Regression test**: `disable enforcer` still works without phase recovery side effects
+
 ## Risks
 
 | Risk | Likelihood | Impact | Mitigation |
@@ -265,3 +411,6 @@ Git Bash for Windows (based on MSYS2) supports `bash --norc`. The `--norc` flag 
 | `planning.plan_reviewed` field breaks existing state without migration | Low | Medium | Use jq `// false` fallback in gate checks; migration script sets default |
 | Plan review gate delays worktree creation for existing workflows | Low | Low | The gate only adds one explicit approval step; existing spec-review gate already does this |
 | Two-step planning gate (plan review → worktree) confuses users | Low | Low | Block messages are explicit about which step is missing |
+| Midstream recovery picks wrong phase | Low | Medium | Recovery rules are ordered by most-advanced-first; test each state field independently |
+| `compgen -G` not available on all platforms | Very Low | Medium | Git Bash and macOS bash both support `compgen -G`; fallback can use `ls` if needed |
+| Recovery overwrites manually-set `current_phase` | Low | Medium | Recovery only runs on `enable enforcer`; once active, normal phase transitions take over |

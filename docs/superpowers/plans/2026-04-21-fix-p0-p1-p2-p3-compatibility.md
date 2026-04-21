@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix five blocking/stability/design-gap issues in the superpowers-flow-enforcer plugin: accept `code-quality-reviewer` as a role alias, isolate hooks from shell profile pollution via `--norc`, add phase-aware guards to the Stop hook, harden state file writes against corruption, and add a plan review intermediate state to the planning phase so plan review/fix/re-review cycles are compatible with the enforced state machine.
+**Goal:** Fix six blocking/stability/design-gap issues in the superpowers-flow-enforcer plugin: accept `code-quality-reviewer` as a role alias, isolate hooks from shell profile pollution via `--norc`, add phase-aware guards to the Stop hook, harden state file writes against corruption, add a plan review intermediate state to the planning phase, and recover the correct `current_phase` when `enable enforcer` is issued mid-workstream.
 
-**Architecture:** Minimal delta changes across nine source files plus four test files. P0 adds a normalization layer at validation boundaries. P1 injects `--norc` into the existing `hooks.json` command pattern. P2 gates two restrictive checks in `check-stop-review-gate.sh` behind `current_phase` conditions. P3 adds JSON object type guards in `init-state.sh` and `update-state.sh`. P4 inserts a `plan_reviewed` state field and a two-step planning gate (plan review → worktree) into `sync-post-tool-state.sh`, `templates/flow_state.json.tmpl`, and `migrate-state.sh`.
+**Architecture:** Minimal delta changes across ten source files plus five test files. P0 adds a normalization layer at validation boundaries. P1 injects `--norc` into the existing `hooks.json` command pattern. P2 gates two restrictive checks in `check-stop-review-gate.sh` behind `current_phase` conditions. P3 adds JSON object type guards in `init-state.sh` and `update-state.sh`. P4 inserts a `plan_reviewed` state field and a two-step planning gate (plan review → worktree) into `sync-post-tool-state.sh`, `templates/flow_state.json.tmpl`, `migrate-state.sh`, and `record-plan-state.sh`. P5 adds `recover_phase_from_state` to `sync-user-prompt-state.sh` for midstream activation.
 
 **Tech Stack:** Bash 4.0+, jq, python3 (for inline JSON parsing in task_flow_packets.sh)
 
@@ -149,24 +149,23 @@ Append to `tests/test_pretool_command_gates.sh`:
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Create a fake HOME with a polluted ~/.bashrc
-FAKE_HOME="$TMP_DIR/fake_home"
-mkdir -p "$FAKE_HOME"
-echo 'echo "PROFILE_POLLUTION"' > "$FAKE_HOME/.bashrc"
+# Create a fake rcfile with stdout pollution
+FAKE_RC="$TMP_DIR/.bashrc"
+echo 'echo "PROFILE_POLLUTION"' > "$FAKE_RC"
 
-# Verify that without --norc, profile pollution contaminates stdout
-polluted_output="$(HOME="$FAKE_HOME" bash "${CLAUDE_PLUGIN_ROOT}/scripts/init-state.sh" < /dev/null)"
+# Use --rcfile to force rcfile loading, proving pollution reaches stdout
+polluted_output="$(bash --rcfile "$FAKE_RC" -i -c 'echo "{\"test\":true}"' 2>/dev/null)"
 if ! echo "$polluted_output" | grep -q "PROFILE_POLLUTION"; then
-  echo "SKIP: Could not reproduce profile pollution on this environment" >&2
+  echo "SKIP: Could not reproduce rcfile pollution via --rcfile on this environment" >&2
 else
-  # Verify --norc suppresses ~/.bashrc pollution
-  clean_output="$(HOME="$FAKE_HOME" bash --norc "${CLAUDE_PLUGIN_ROOT}/scripts/init-state.sh" < /dev/null)"
+  # Prove --norc suppresses rcfile loading even when --rcfile is specified
+  clean_output="$(bash --norc --rcfile "$FAKE_RC" -i -c 'echo "{\"test\":true}"' 2>/dev/null)"
   if echo "$clean_output" | grep -q "PROFILE_POLLUTION"; then
-    echo "FAIL: bash --norc failed to suppress ~/.bashrc pollution" >&2
+    echo "FAIL: bash --norc failed to suppress rcfile pollution" >&2
     exit 1
   fi
   if ! echo "$clean_output" | jq empty >/dev/null 2>&1; then
-    echo "FAIL: Clean hook output is not valid JSON" >&2
+    echo "FAIL: Clean output is not valid JSON" >&2
     exit 1
   fi
 fi
@@ -459,7 +458,8 @@ git commit -m "feat(p3): guard state file against corruption with object type ch
 - Modify: `templates/flow_state.json.tmpl` (add `plan_reviewed` field)
 - Modify: `scripts/sync-post-tool-state.sh` (set `plan_reviewed = false` on write; split single worktree gate into two-step gate)
 - Modify: `scripts/migrate-state.sh` (bootstrap `plan_reviewed` default for v1→v2 migration)
-- Modify: `tests/test_posttool_command_gates.sh` (update plan-write assertions to expect plan-review block, add plan-reviewed allow test)
+- Create: `scripts/record-plan-state.sh` (write entry for `plan_reviewed`, mirrors `record-spec-state.sh`)
+- Modify: `tests/test_posttool_command_gates.sh` (update plan-write assertions to expect plan-review block, add worktree gate test after plan_reviewed=true)
 - Verify: `scripts/init-state.sh` fresh-state path produces `plan_reviewed: false` (no code change expected; template already contains the field)
 
 **Parallel safety:** Safe to run in parallel with Packet 1, Packet 2, and Packet 3. Must run after Packet 4 only if Packet 4 touches `sync-post-tool-state.sh`; in this plan Packet 4 does not.
@@ -481,15 +481,17 @@ assert_json_equals "$STATE_FILE" '.planning.plan_written' 'true'
 assert_json_equals "$STATE_FILE" '.planning.plan_file' '"docs/superpowers/plans/demo.md"'
 assert_json_equals "$STATE_FILE" '.planning.plan_reviewed' 'false'
 
-# P4: plan write with plan_reviewed=true should allow (worktree gate comes next)
+# P4: after plan_reviewed=true, non-plan write hits worktree gate (not plan-review gate)
 write_v2_state "$STATE_FILE"
 jq '
   .brainstorming.spec_reviewed = true
+  | .planning.plan_written = true
+  | .planning.plan_file = "docs/superpowers/plans/demo.md"
   | .planning.plan_reviewed = true
 ' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
-plan_allow_output="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
-assert_posttool_allow "$plan_allow_output"
+worktree_block_output="$(run_posttool_write 'docs/superpowers/other.md')"
+assert_posttool_block "$worktree_block_output" 'worktree'
 ```
 
 Also add a re-edit consistency test after the above:
@@ -606,7 +608,45 @@ To:
     },
 ```
 
-- [ ] **Step 7: Verify tests pass (GREEN)**
+- [ ] **Step 7: Create `record-plan-state.sh`**
+
+Create `scripts/record-plan-state.sh` mirroring `scripts/record-spec-state.sh`:
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+if [ "$#" -ne 2 ]; then
+  echo 'Usage: record-plan-state.sh plan-reviewed pass|fail' >&2
+  exit 1
+fi
+
+ACTION="$1"
+RESULT="$2"
+
+case "$ACTION" in
+  plan-reviewed) FIELD="plan_reviewed" ;;
+  *) echo "Unsupported plan action: $ACTION" >&2; exit 1 ;;
+esac
+
+case "$RESULT" in
+  pass) VALUE=true ;;
+  fail) VALUE=false ;;
+  *) echo "Unsupported result: $RESULT" >&2; exit 1 ;;
+esac
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+
+jq -n --argjson value "$VALUE" --arg field "$FIELD" '{planning:{($field):$value}}' \
+  | bash "$PLUGIN_ROOT/scripts/update-state.sh" --merge >/dev/null
+```
+
+Make executable: `chmod +x scripts/record-plan-state.sh`
+
+Verify: `CLAUDE_PROJECT_DIR=/tmp bash scripts/record-plan-state.sh plan-reviewed pass && echo "ok"`
+
+- [ ] **Step 8: Verify tests pass (GREEN)**
 
 Run: `bash tests/test_posttool_command_gates.sh`
 Expected: PASS.
@@ -614,18 +654,173 @@ Expected: PASS.
 Run: `bash tests/test_init_state.sh`
 Expected: PASS (regression check; fresh state and migrated state must both contain `planning.plan_reviewed`).
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
-git add templates/flow_state.json.tmpl scripts/sync-post-tool-state.sh scripts/init-state.sh scripts/migrate-state.sh tests/test_posttool_command_gates.sh
-git commit -m "feat(p4): add plan review gate before worktree creation"
+git add templates/flow_state.json.tmpl scripts/sync-post-tool-state.sh scripts/migrate-state.sh scripts/record-plan-state.sh tests/test_posttool_command_gates.sh
+git commit -m "feat(p4): add plan review gate with record-plan-state.sh"
 ```
 
 ---
 
-## Packet 6: Full regression and active docs sync
+## Packet 6: P5 — Midstream activation phase recovery
 
-**User-facing goal:** All five fixes work together without regressions, and active planning files reflect completion.
+**User-facing goal:** When `enable enforcer` is issued mid-workstream, the enforcer recovers the correct `current_phase` from structured state fields and canonical artifacts, rather than staying at `init`.
+
+**Owned files:**
+- Modify: `scripts/sync-user-prompt-state.sh` (add `recover_phase_from_state` function and integrate into activation handler)
+- Modify: `tests/test_user_prompt_state.sh` (P5 recovery tests)
+
+**Parallel safety:** Safe to run in parallel with Packet 1, Packet 2, and Packet 3. Shares no files. Must run after Packet 5 only if Packet 5 touches `sync-user-prompt-state.sh`; in this plan Packet 5 does not.
+
+**Default verification:** `bash tests/test_user_prompt_state.sh`
+
+- [ ] **Step 1: Write failing tests (RED)**
+
+Append to `tests/test_user_prompt_state.sh`:
+
+```bash
+# P5: Midstream activation phase recovery tests
+
+# Test: planning.plan_written=true recovers to "planning"
+write_v2_state "$STATE_FILE"
+jq '.planning.plan_written = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+prompt_output="$(run_user_prompt 'enable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+
+# Test: brainstorming.spec_written=true recovers to "brainstorming"
+write_v2_state "$STATE_FILE"
+jq '.brainstorming.spec_written = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+prompt_output="$(run_user_prompt 'enable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
+
+# Test: worktree.created=true recovers to "tdd"
+write_v2_state "$STATE_FILE"
+jq '.worktree.created = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+prompt_output="$(run_user_prompt 'enable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.current_phase' '"tdd"'
+
+# Test: review.tasks non-empty recovers to "review"
+write_v2_state "$STATE_FILE"
+jq '.review.tasks = {"task-001": {"spec_review_passed": true}}' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+prompt_output="$(run_user_prompt 'enable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.current_phase' '"review"'
+
+# Test: finishing.invoked=true recovers to "finishing"
+write_v2_state "$STATE_FILE"
+jq '.finishing.invoked = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+prompt_output="$(run_user_prompt 'enable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.current_phase' '"finishing"'
+
+# Test: empty state stays at "init"
+write_v2_state "$STATE_FILE"
+prompt_output="$(run_user_prompt 'enable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
+
+# Regression: disable enforcer does not run recovery
+write_v2_state "$STATE_FILE"
+jq '.planning.plan_written = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+prompt_output="$(run_user_prompt 'disable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
+```
+
+Run: `bash tests/test_user_prompt_state.sh`
+Expected: FAIL at recovery assertions (sync-user-prompt-state.sh not yet updated).
+
+- [ ] **Step 2: Add `recover_phase_from_state` function**
+
+In `scripts/sync-user-prompt-state.sh`, before `is_manual_activate_exact_command()`, add:
+
+```bash
+recover_phase_from_state() {
+  local state_file="$1"
+
+  # State-first recovery: check structured fields in priority order
+  if jq -e '.finishing.invoked == true' "$state_file" >/dev/null 2>&1; then
+    echo "finishing"; return 0
+  fi
+  if jq -e '.review.tasks | length > 0' "$state_file" >/dev/null 2>&1; then
+    echo "review"; return 0
+  fi
+  if jq -e '.tdd.current_task != null or .worktree.created == true' "$state_file" >/dev/null 2>&1; then
+    echo "tdd"; return 0
+  fi
+  if jq -e '.planning.plan_written == true' "$state_file" >/dev/null 2>&1; then
+    echo "planning"; return 0
+  fi
+  if jq -e '.brainstorming.spec_written == true' "$state_file" >/dev/null 2>&1; then
+    echo "brainstorming"; return 0
+  fi
+
+  # Artifact fallback: check canonical file existence
+  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
+  if compgen -G "$project_dir/docs/superpowers/plans/*.md" >/dev/null 2>&1; then
+    echo "planning"; return 0
+  fi
+  if compgen -G "$project_dir/docs/superpowers/specs/*.md" >/dev/null 2>&1; then
+    echo "brainstorming"; return 0
+  fi
+
+  echo "init"
+}
+```
+
+- [ ] **Step 3: Integrate recovery into activation handler**
+
+Replace the activation handler block (lines 228-242):
+
+```bash
+if is_manual_activate_exact_command "$PROMPT_LC"; then
+  RECOVERED_PHASE="$(recover_phase_from_state "$STATE_FILE")"
+  jq --arg now "$NOW_UTC" --arg phase "$RECOVERED_PHASE" '
+    .workflow.active = true
+    | .workflow.override = "manual_on"
+    | .workflow.activated_by = "manual_prompt"
+    | .workflow.activated_at = $now
+    | .workflow.deactivated_by = null
+    | .workflow.deactivated_at = null
+    | .interrupt.allowed = false
+    | .interrupt.reason = null
+    | .interrupt.keywords_detected = []
+    | .current_phase = $phase
+  ' "$STATE_FILE" > "$tmp_file"
+  mv "$tmp_file" "$STATE_FILE"
+  exit 0
+fi
+```
+
+- [ ] **Step 4: Verify tests pass (GREEN)**
+
+Run: `bash tests/test_user_prompt_state.sh`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add scripts/sync-user-prompt-state.sh tests/test_user_prompt_state.sh
+git commit -m "feat(p5): midstream activation phase recovery on enable enforcer"
+```
+
+---
+
+## Packet 7: Full regression and active docs sync
+
+**User-facing goal:** All six fixes work together without regressions, and active planning files and user-facing docs reflect completion.
 
 **Owned files:**
 - Modify: `task_plan.md`, `progress.md`
@@ -655,6 +850,8 @@ bash -n scripts/update-state.sh
 bash -n scripts/check-pretool-gates.sh
 bash -n scripts/check-stop-review-gate.sh
 bash -n scripts/sync-post-tool-state.sh
+bash -n scripts/sync-user-prompt-state.sh
+bash -n scripts/record-plan-state.sh
 bash -n scripts/lib/task_flow_packets.sh
 ```
 
@@ -662,14 +859,9 @@ Expected: All PASS.
 
 - [ ] **Step 3: Sync user-facing docs**
 
-Update `CLAUDE.md` and `README.md` / `README_cn.md` to mention `code-quality-reviewer` as an accepted packet role alias (alongside `code-reviewer`).
+Update `CLAUDE.md` and `README.md` / `README_cn.md`:
 
-Search for existing `code-reviewer` mentions in user-facing docs and add the alias:
-```bash
-grep -n 'code-reviewer' CLAUDE.md README.md README_cn.md 2>/dev/null || true
-```
-
-For example, in `CLAUDE.md` line 57 (Packetized Subagent Execution section), change:
+1. Add `code-quality-reviewer` alias. In `CLAUDE.md` Packetized Subagent Execution section, change:
 ```markdown
 - Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer`.
 ```
@@ -678,9 +870,24 @@ To:
 - Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer` or `SPFE_PACKET_ROLE=code-quality-reviewer` (both are accepted; the latter is normalized to the former internally).
 ```
 
+2. Add `planning.plan_reviewed` gate description. In `CLAUDE.md` Brainstorming / Planning section, add:
+```markdown
+- **Planning Phase**: After activation, plan writing sets `plan_reviewed = false`. The plan must pass review before worktree creation is allowed. Use `record-plan-state.sh plan-reviewed pass` to mark review completion.
+```
+
+3. Add midstream activation behavior. In `CLAUDE.md` Workflow Entry section, add:
+```markdown
+- **Midstream Activation**: When `enable enforcer` is issued mid-workstream, the enforcer recovers `current_phase` from structured state fields and canonical artifacts. Phase is not inferred from natural language.
+```
+
+Search for existing mentions to avoid duplicates:
+```bash
+grep -n 'code-reviewer\|plan_reviewed\|midstream\|plan-reviewed' CLAUDE.md README.md README_cn.md 2>/dev/null || true
+```
+
 - [ ] **Step 4: Update active tracking files**
 
-Update `task_plan.md` phase 8 checklist to include P0–P4:
+Update `task_plan.md` phase 8 checklist to include P0–P5:
 
 ```markdown
 ### 阶段 8：TDD 实施
@@ -690,12 +897,14 @@ Update `task_plan.md` phase 8 checklist to include P0–P4:
   - [x] P2: Stop hook phase guard 测试
   - [x] P3: State file corruption guard 测试
   - [x] P4: Planning review gate 测试
+  - [x] P5: Midstream activation phase recovery 测试
 - [x] GREEN: 实施最小代码改动
   - [x] P0: 修改 task_flow_packets.sh、check-pretool-gates.sh、sync-post-tool-state.sh
   - [x] P1: 修改 hooks.json
   - [x] P2: 修改 check-stop-review-gate.sh
   - [x] P3: 修改 init-state.sh、update-state.sh
-  - [x] P4: 修改 flow_state.json.tmpl、sync-post-tool-state.sh、init-state.sh、migrate-state.sh
+  - [x] P4: 修改 flow_state.json.tmpl、sync-post-tool-state.sh、migrate-state.sh、record-plan-state.sh
+  - [x] P5: 修改 sync-user-prompt-state.sh
 - [x] REFACTOR: 清理代码
 - [x] 验证所有测试通过
 ```
@@ -732,10 +941,11 @@ git commit -m "docs: mark P0-P4 implementation complete"
 
 **1. Spec coverage:**
 - Goal 1 (code-quality-reviewer): Packet 1 covers validation, pretool gate, and state normalization. ✅
-- Goal 2 (--norc): Packet 2 covers test and hooks.json injection. ✅
+- Goal 2 (--norc): Packet 2 covers behavioral rcfile test and hooks.json injection. ✅
 - Goal 3 (phase guard): Packet 3 covers tests and implementation. ✅
 - Goal 4 (corruption guard): Packet 4 covers init-state.sh and update-state.sh hardening. ✅
-- Goal 5 (planning review gate): Packet 5 covers state schema, posttool gate split, template, init, migration, and tests. ✅
+- Goal 5 (planning review gate): Packet 5 covers state schema, posttool gate split, template, init, migration, `record-plan-state.sh`, and tests. ✅
+- Goal 6 (midstream activation): Packet 6 covers `recover_phase_from_state`, activation handler integration, and 8 recovery tests. ✅
 - Completion claim verification untouched (runs in all phases) — verified in P2 regression test. ✅
 
 **2. Placeholder scan:**
