@@ -98,6 +98,7 @@ When `enable enforcer` is issued mid-workstream, the enforcer currently only set
 - Recovery does not infer phase from natural language, user prompts, or assistant prose
 - When no state fields or artifacts indicate progress, `current_phase` stays at `init`
 - The recovery logic runs inside `sync-user-prompt-state.sh` during the `is_manual_activate_exact_command` handler
+- `enable enforcer` also clears `resume.recovery_required = false` so that subsequent Edit/Write/Agent are not blocked by the resume gate
 - Existing `disable enforcer` behavior is unaffected
 
 ## Non-Goals
@@ -299,11 +300,14 @@ if is_manual_activate_exact_command "$PROMPT_LC"; then
     | .interrupt.reason = null
     | .interrupt.keywords_detected = []
     | .current_phase = $phase
+    | .resume.recovery_required = false
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   exit 0
 fi
 ```
+
+The activation handler clears `resume.recovery_required` because an explicit `enable enforcer` signals the user intends to proceed with the current state as-is. Without this clearance, `check-pretool-gates.sh` would still block Edit/Write/Agent with a resume-enforcer gate even after phase recovery succeeds.
 
 Where `recover_phase_from_state` is a new function:
 
@@ -399,6 +403,7 @@ Git Bash for Windows (based on MSYS2) supports `bash --norc`. The `--norc` flag 
 6. **Unit test**: Empty state (all defaults), verify recovery keeps `current_phase = "init"`
 7. **Artifact fallback test**: State with no structured fields but `docs/superpowers/specs/*.md` exists, verify recovery sets `current_phase = "brainstorming"`
 8. **Regression test**: `disable enforcer` still works without phase recovery side effects
+9. **Resume clearance test**: State with `resume.recovery_required = true`, issue `enable enforcer`, verify `resume.recovery_required` is cleared to `false`
 
 ## Risks
 

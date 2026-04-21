@@ -196,6 +196,8 @@ git add hooks/hooks.json tests/test_pretool_command_gates.sh
 git commit -m "feat(p1): isolate hooks from shell profile pollution with --norc"
 ```
 
+Note: The `--rcfile` test proves that `bash --norc` reliably suppresses rcfile pollution at the shell behavior level. This is an approximation of the full Claude Code hook runtime, which spawns bash in a way that sources the user's profile. A complete end-to-end test would require simulating the Claude Code hook launcher, which is outside this plugin's test scope.
+
 ---
 
 ## Packet 3: P2 — Stop hook phase guard
@@ -669,86 +671,138 @@ git commit -m "feat(p4): add plan review gate with record-plan-state.sh"
 
 **Owned files:**
 - Modify: `scripts/sync-user-prompt-state.sh` (add `recover_phase_from_state` function and integrate into activation handler)
-- Modify: `tests/test_user_prompt_state.sh` (P5 recovery tests)
+- Modify: `tests/test_bypass_state.sh` (P5 recovery tests, appended after existing enable/disable enforcer tests at line ~842)
 
-**Parallel safety:** Safe to run in parallel with Packet 1, Packet 2, and Packet 3. Shares no files. Must run after Packet 5 only if Packet 5 touches `sync-user-prompt-state.sh`; in this plan Packet 5 does not.
+**Parallel safety:** Safe to run in parallel with Packet 1, Packet 2, and Packet 3. Shares no files with other packets.
 
-**Default verification:** `bash tests/test_user_prompt_state.sh`
+**Default verification:** `bash tests/test_bypass_state.sh`
 
 - [ ] **Step 1: Write failing tests (RED)**
 
-Append to `tests/test_user_prompt_state.sh`:
+Append to `tests/test_bypass_state.sh` after the existing enable/disable enforcer test block (after line ~842). The test uses the same pattern as the existing `MANUAL_PROMPT_PROJECT` and `STATE_FILE` variables already defined in that file:
 
 ```bash
 # P5: Midstream activation phase recovery tests
 
 # Test: planning.plan_written=true recovers to "planning"
 write_v2_state "$STATE_FILE"
-jq '.planning.plan_written = true' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-prompt_output="$(run_user_prompt 'enable enforcer')"
-assert_user_prompt_allows "$prompt_output"
+jq '.planning.plan_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_PLANNING_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_PLANNING_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
 assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
 
 # Test: brainstorming.spec_written=true recovers to "brainstorming"
 write_v2_state "$STATE_FILE"
-jq '.brainstorming.spec_written = true' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-prompt_output="$(run_user_prompt 'enable enforcer')"
-assert_user_prompt_allows "$prompt_output"
+jq '.brainstorming.spec_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_BRAINSTORM_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_BRAINSTORM_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer brainstorming recovery to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
 
 # Test: worktree.created=true recovers to "tdd"
 write_v2_state "$STATE_FILE"
-jq '.worktree.created = true' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-prompt_output="$(run_user_prompt 'enable enforcer')"
-assert_user_prompt_allows "$prompt_output"
+jq '.worktree.created = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_TDD_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_TDD_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer tdd recovery to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"tdd"'
 
 # Test: review.tasks non-empty recovers to "review"
 write_v2_state "$STATE_FILE"
-jq '.review.tasks = {"task-001": {"spec_review_passed": true}}' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-prompt_output="$(run_user_prompt 'enable enforcer')"
-assert_user_prompt_allows "$prompt_output"
+jq '.review.tasks = {"task-001": {"spec_review_passed": true}}' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_REVIEW_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_REVIEW_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer review recovery to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"review"'
 
 # Test: finishing.invoked=true recovers to "finishing"
 write_v2_state "$STATE_FILE"
-jq '.finishing.invoked = true' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-prompt_output="$(run_user_prompt 'enable enforcer')"
-assert_user_prompt_allows "$prompt_output"
+jq '.finishing.invoked = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_FINISHING_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_FINISHING_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer finishing recovery to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"finishing"'
 
 # Test: empty state stays at "init"
 write_v2_state "$STATE_FILE"
-prompt_output="$(run_user_prompt 'enable enforcer')"
-assert_user_prompt_allows "$prompt_output"
+P5_INIT_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_INIT_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer empty state to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
+
+# Test: enable enforcer clears resume.recovery_required
+write_v2_state "$STATE_FILE"
+jq '.planning.plan_written = true | .resume.recovery_required = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_RESUME_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_RESUME_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer with resume to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
 
 # Regression: disable enforcer does not run recovery
 write_v2_state "$STATE_FILE"
-jq '.planning.plan_written = true' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-prompt_output="$(run_user_prompt 'disable enforcer')"
-assert_user_prompt_allows "$prompt_output"
+jq '.planning.plan_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_DISABLE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_DISABLE_OUTPUT" ]; then
+  echo "P5: Expected disable enforcer to be silent allow" >&2
+  exit 1
+fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
 assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
-
-# Artifact fallback: no state fields but specs/ directory exists → brainstorming
-write_v2_state "$STATE_FILE"
-mkdir -p "$TMP_DIR/docs/superpowers/specs"
-touch "$TMP_DIR/docs/superpowers/specs/test-spec.md"
-prompt_output="$(CLAUDE_PROJECT_DIR="$TMP_DIR" run_user_prompt 'enable enforcer')"
-assert_user_prompt_allows "$prompt_output"
-assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
 ```
 
-Run: `bash tests/test_user_prompt_state.sh`
-Expected: FAIL at recovery assertions (sync-user-prompt-state.sh not yet updated).
+Note: The artifact fallback test requires a different project directory with actual spec/plan files. This test should be appended to `tests/test_workflow_activation.sh` instead, since that file already creates spec/plan directories. For the primary test surface, `tests/test_bypass_state.sh` covers the state-field recovery path.
+
+Run: `bash tests/test_bypass_state.sh`
+Expected: FAIL at P5 recovery assertions (sync-user-prompt-state.sh not yet updated).
 
 - [ ] **Step 2: Add `recover_phase_from_state` function**
 
@@ -806,21 +860,24 @@ if is_manual_activate_exact_command "$PROMPT_LC"; then
     | .interrupt.reason = null
     | .interrupt.keywords_detected = []
     | .current_phase = $phase
+    | .resume.recovery_required = false
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   exit 0
 fi
 ```
 
+The `resume.recovery_required = false` clearance is critical: without it, `check-pretool-gates.sh` would still block Edit/Write/Agent with the resume gate even after phase recovery succeeds.
+
 - [ ] **Step 4: Verify tests pass (GREEN)**
 
-Run: `bash tests/test_user_prompt_state.sh`
+Run: `bash tests/test_bypass_state.sh`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/sync-user-prompt-state.sh tests/test_user_prompt_state.sh
+git add scripts/sync-user-prompt-state.sh tests/test_bypass_state.sh
 git commit -m "feat(p5): midstream activation phase recovery on enable enforcer"
 ```
 
