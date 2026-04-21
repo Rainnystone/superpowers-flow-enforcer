@@ -458,13 +458,13 @@ git commit -m "feat(p3): guard state file against corruption with object type ch
 **Owned files:**
 - Modify: `templates/flow_state.json.tmpl` (add `plan_reviewed` field)
 - Modify: `scripts/sync-post-tool-state.sh` (set `plan_reviewed = false` on write; split single worktree gate into two-step gate)
-- Modify: `scripts/init-state.sh` (bootstrap `plan_reviewed` default for fresh states)
 - Modify: `scripts/migrate-state.sh` (bootstrap `plan_reviewed` default for v1→v2 migration)
 - Modify: `tests/test_posttool_command_gates.sh` (update plan-write assertions to expect plan-review block, add plan-reviewed allow test)
+- Verify: `scripts/init-state.sh` fresh-state path produces `plan_reviewed: false` (no code change expected; template already contains the field)
 
 **Parallel safety:** Safe to run in parallel with Packet 1, Packet 2, and Packet 3. Must run after Packet 4 only if Packet 4 touches `sync-post-tool-state.sh`; in this plan Packet 4 does not.
 
-**Default verification:** `bash tests/test_posttool_command_gates.sh`
+**Default verification:** `bash tests/test_posttool_command_gates.sh && bash tests/test_init_state.sh`
 
 - [ ] **Step 1: Write failing tests (RED)**
 
@@ -568,11 +568,20 @@ With:
   fi
 ```
 
-- [ ] **Step 5: Bootstrap `plan_reviewed` in init-state.sh**
+- [ ] **Step 5: Verify `plan_reviewed` in fresh state (init-state.sh)**
 
-`scripts/init-state.sh` has no `normalize_planning_state()` healing path for v2 states. Fresh states get `plan_reviewed: false` from the template (Step 2). For existing v2 states that predate this field, all gate scripts use `state_is_true '.planning.plan_reviewed'` which evaluates `null == true` as false, so the missing field safely defaults to `false`. No extra init logic is required.
+`scripts/init-state.sh` has no `normalize_planning_state()` healing path for v2 states. Fresh states get `plan_reviewed: false` from the template (Step 2). For existing v2 states that predate this field, all gate scripts use `state_is_true '.planning.plan_reviewed'` which evaluates `null == true` as false, so the missing field safely defaults to `false`. No code change in `init-state.sh` is required.
 
-Verify by checking `scripts/init-state.sh` does not contain `normalize_planning_state`; if it does, add `.planning.plan_reviewed = (.planning.plan_reviewed // false)` to that function.
+Run a quick verification:
+```bash
+rm -f "$TMP_DIR/.claude/flow_state.json"
+mkdir -p "$TMP_DIR/.claude"
+echo '{}' | CLAUDE_PROJECT_DIR="$TMP_DIR" bash "${CLAUDE_PLUGIN_ROOT}/scripts/init-state.sh" >/dev/null
+jq -e '.planning.plan_reviewed == false' "$TMP_DIR/.claude/flow_state.json" >/dev/null 2>&1 || {
+  echo "FAIL: Fresh state missing planning.plan_reviewed = false" >&2
+  exit 1
+}
+```
 
 - [ ] **Step 6: Bootstrap `plan_reviewed` in migrate-state.sh**
 
@@ -601,6 +610,9 @@ To:
 
 Run: `bash tests/test_posttool_command_gates.sh`
 Expected: PASS.
+
+Run: `bash tests/test_init_state.sh`
+Expected: PASS (regression check; fresh state and migrated state must both contain `planning.plan_reviewed`).
 
 - [ ] **Step 8: Commit**
 
@@ -648,12 +660,30 @@ bash -n scripts/lib/task_flow_packets.sh
 
 Expected: All PASS.
 
-- [ ] **Step 3: Update active docs**
+- [ ] **Step 3: Sync user-facing docs**
 
-Update `task_plan.md` phase 6 checklist to include P0–P4:
+Update `CLAUDE.md` and `README.md` / `README_cn.md` to mention `code-quality-reviewer` as an accepted packet role alias (alongside `code-reviewer`).
+
+Search for existing `code-reviewer` mentions in user-facing docs and add the alias:
+```bash
+grep -n 'code-reviewer' CLAUDE.md README.md README_cn.md 2>/dev/null || true
+```
+
+For example, in `CLAUDE.md` line 57 (Packetized Subagent Execution section), change:
+```markdown
+- Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer`.
+```
+To:
+```markdown
+- Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer` or `SPFE_PACKET_ROLE=code-quality-reviewer` (both are accepted; the latter is normalized to the former internally).
+```
+
+- [ ] **Step 4: Update active tracking files**
+
+Update `task_plan.md` phase 8 checklist to include P0–P4:
 
 ```markdown
-### 阶段 6：TDD 实施
+### 阶段 8：TDD 实施
 - [x] RED: 编写测试用例
   - [x] P0: code-quality-reviewer 角色测试
   - [x] P1: --norc 隔离测试
@@ -689,10 +719,10 @@ Append to `progress.md`:
 5. P4: `templates/flow_state.json.tmpl`, `scripts/sync-post-tool-state.sh`, `scripts/migrate-state.sh` — planning 阶段两阶段门控 (plan review → worktree)
 ```
 
-- [ ] **Step 4: Final commit**
+- [ ] **Step 5: Final commit**
 
 ```bash
-git add task_plan.md progress.md
+git add task_plan.md progress.md CLAUDE.md README.md README_cn.md
 git commit -m "docs: mark P0-P4 implementation complete"
 ```
 

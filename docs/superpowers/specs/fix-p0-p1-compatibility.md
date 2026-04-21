@@ -72,6 +72,7 @@ The `brainstorming` phase has a two-step gate (`spec_written` → `spec_reviewed
 - After `plan_reviewed` is set to `true`, the worktree gate becomes active (existing worktree block behavior resumes)
 - Re-editing the same canonical plan file while `plan_reviewed == false` does not produce a different or confusing block message
 - The `planning` state schema change is reflected in template, init, and migration logic
+- `plan_reviewed` defaults to `false` for fresh states, migrated v1 states, and existing v2 states that predate this field (safe via `// false` fallback in gate checks)
 
 ## Non-Goals
 
@@ -80,6 +81,7 @@ The `brainstorming` phase has a two-step gate (`spec_written` → `spec_reviewed
 - No `if` field optimization on Bash matcher (out of scope for this fix)
 - No changes to `sha256sum || shasum` fallback logic (already verified safe)
 - No changes to plugin dev mode or hook lifecycle (platform limitation, not fixable in this repo)
+- No midstream activation phase recovery rules (e.g., inferring current phase from existing canonical files when `enable enforcer` is issued mid-workstream). The current behavior trusts the existing `.claude/flow_state.json` as-is. Phase recovery semantics can be defined in a future workstream.
 
 ## Design
 
@@ -196,6 +198,8 @@ The `brainstorming` phase already models a review gate with `.brainstorming.spec
        block_posttool "Plan 已通过 review，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。"
    fi
    ```
+
+**`plan_reviewed` write semantics** — The field is initialized to `false` by the canonical plan write hook. Setting it to `true` follows the same manual-marking pattern as `brainstorming.spec_reviewed` (which is set via `record-review-state.sh` or equivalent manual state update). No new automation script is introduced in this fix; the model or user marks plan review completion explicitly, just as they do for spec review. This preserves consistency with the existing `spec_reviewed` pattern without expanding scope.
 
 This preserves the existing worktree gate behavior while inserting a plan review intermediate state. The plan review → fix → re-review cycle is now possible because re-editing the plan while `plan_reviewed == false` continues to block with the same plan-review message rather than jumping ahead to worktree.
 
