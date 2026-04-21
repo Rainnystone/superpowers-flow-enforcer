@@ -934,3 +934,176 @@ if [ -e "$NOOP_PWD/.claude/flow_state.json" ]; then
   echo "Expected malformed stdin to not create state in $NOOP_PWD" >&2
   exit 1
 fi
+
+# P5: Midstream activation phase recovery tests
+
+# Test: existing non-init phase is preserved
+write_v2_state "$STATE_FILE"
+jq '.current_phase = "review"' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_REVIEW_PHASE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_REVIEW_PHASE_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer preserve-phase path to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"review"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+
+# Test: debugging.active=true recovers to "debugging"
+write_v2_state "$STATE_FILE"
+jq '.debugging.active = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_DEBUG_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_DEBUG_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer debugging recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"debugging"'
+
+# Test: worktree.created=true with baseline false recovers to "worktree"
+write_v2_state "$STATE_FILE"
+jq '.worktree.created = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_WORKTREE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_WORKTREE_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer worktree recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"worktree"'
+
+# Test: baseline verified recovers to "tdd"
+write_v2_state "$STATE_FILE"
+jq '.worktree.created = true | .worktree.baseline_verified = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_TDD_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_TDD_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer tdd recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"tdd"'
+
+# Test: planning.plan_written=true recovers to "planning"
+write_v2_state "$STATE_FILE"
+jq '.planning.plan_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_PLANNING_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_PLANNING_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer planning recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
+
+# Test: brainstorming.spec_written=true recovers to "brainstorming"
+write_v2_state "$STATE_FILE"
+jq '.brainstorming.spec_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_BRAINSTORM_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_BRAINSTORM_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer brainstorming recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
+
+# Test: finishing.invoked=true recovers to "finishing"
+write_v2_state "$STATE_FILE"
+jq '.finishing.invoked = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_FINISHING_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_FINISHING_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer finishing recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"finishing"'
+
+# Test: empty state stays at "init"
+write_v2_state "$STATE_FILE"
+P5_INIT_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_INIT_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer empty state to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
+
+# Test: enable enforcer must NOT clear resume.recovery_required
+write_v2_state "$STATE_FILE"
+jq '.planning.plan_written = true | .resume.recovery_required = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_RESUME_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_RESUME_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer with resume to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'true'
+
+# Regression: disable enforcer does not change current_phase
+write_v2_state "$STATE_FILE"
+jq '.current_phase = "planning" | .planning.plan_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_DISABLE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_DISABLE_OUTPUT" ]; then
+  echo "P5: Expected disable enforcer to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
+
+# P5: Artifact fallback - canonical plan artifact recovers to "planning"
+write_v2_state "$STATE_FILE"
+mkdir -p "$MANUAL_PROMPT_PROJECT/docs/superpowers/plans"
+touch "$MANUAL_PROMPT_PROJECT/docs/superpowers/plans/test-plan.md"
+P5_ARTIFACT_PLAN_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+rm -rf "$MANUAL_PROMPT_PROJECT/docs"
+if [ -n "$P5_ARTIFACT_PLAN_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer artifact-plan fallback to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
+
+# P5: Artifact fallback - canonical spec artifact recovers to "brainstorming"
+write_v2_state "$STATE_FILE"
+mkdir -p "$MANUAL_PROMPT_PROJECT/docs/superpowers/specs"
+touch "$MANUAL_PROMPT_PROJECT/docs/superpowers/specs/test-spec.md"
+P5_ARTIFACT_SPEC_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+rm -rf "$MANUAL_PROMPT_PROJECT/docs"
+if [ -n "$P5_ARTIFACT_SPEC_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer artifact-spec fallback to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'

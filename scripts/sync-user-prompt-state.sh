@@ -133,6 +133,53 @@ is_interrupt_exact_command() {
   return 1
 }
 
+recover_phase_from_state() {
+  local state_file="$1"
+  local project_dir="$2"
+  local current_phase
+
+  current_phase="$(jq -r '.current_phase // "init"' "$state_file" 2>/dev/null || echo init)"
+  case "$current_phase" in
+    brainstorming|planning|worktree|tdd|review|debugging|finishing)
+      echo "$current_phase"; return 0 ;;
+  esac
+
+  if jq -e '.finishing.invoked == true' "$state_file" >/dev/null 2>&1; then
+    echo "finishing"; return 0
+  fi
+  if jq -e '.debugging.active == true' "$state_file" >/dev/null 2>&1; then
+    echo "debugging"; return 0
+  fi
+  if jq -e '.worktree.created == true and (.worktree.baseline_verified // false) != true' "$state_file" >/dev/null 2>&1; then
+    echo "worktree"; return 0
+  fi
+  if jq -e '.tdd.current_task != null or (.worktree.baseline_verified // false) == true' "$state_file" >/dev/null 2>&1; then
+    echo "tdd"; return 0
+  fi
+  if jq -e '.planning.plan_written == true' "$state_file" >/dev/null 2>&1; then
+    echo "planning"; return 0
+  fi
+  if jq -e '.brainstorming.spec_written == true' "$state_file" >/dev/null 2>&1; then
+    echo "brainstorming"; return 0
+  fi
+
+  # Artifact fallback: check for canonical spec/plan files
+  if [ -d "$project_dir" ]; then
+    local plan_files
+    plan_files="$(find "$project_dir" -path '*/docs/superpowers/plans/*.md' -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.worktrees/*' 2>/dev/null | head -1)"
+    if [ -n "$plan_files" ]; then
+      echo "planning"; return 0
+    fi
+    local spec_files
+    spec_files="$(find "$project_dir" -path '*/docs/superpowers/specs/*.md' -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.worktrees/*' 2>/dev/null | head -1)"
+    if [ -n "$spec_files" ]; then
+      echo "brainstorming"; return 0
+    fi
+  fi
+
+  echo "init"
+}
+
 is_manual_activate_exact_command() {
   case "$1" in
     "激活 superpowers enforcer"|"activate superpowers enforcer"|"开启 enforcer"|"enable enforcer")
@@ -226,7 +273,8 @@ if is_manual_deactivate_exact_command "$PROMPT_LC"; then
 fi
 
 if is_manual_activate_exact_command "$PROMPT_LC"; then
-  jq --arg now "$NOW_UTC" '
+  RECOVERED_PHASE="$(recover_phase_from_state "$STATE_FILE" "$PROJECT_DIR")"
+  jq --arg now "$NOW_UTC" --arg phase "$RECOVERED_PHASE" '
     .workflow.active = true
     | .workflow.override = "manual_on"
     | .workflow.activated_by = "manual_prompt"
@@ -236,6 +284,7 @@ if is_manual_activate_exact_command "$PROMPT_LC"; then
     | .interrupt.allowed = false
     | .interrupt.reason = null
     | .interrupt.keywords_detected = []
+    | .current_phase = $phase
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   exit 0
