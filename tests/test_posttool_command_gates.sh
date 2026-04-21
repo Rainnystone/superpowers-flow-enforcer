@@ -143,6 +143,13 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 worktree_block_output="$(run_posttool_write 'docs/superpowers/other.md')"
 assert_posttool_block "$worktree_block_output" 'worktree'
 
+# Codex review fix [P2]: plan_reviewed=true without plan_written should NOT trigger worktree block
+write_v2_state "$STATE_FILE"
+jq '.brainstorming.spec_reviewed = true | .planning.plan_reviewed = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+nowt_block_output="$(run_posttool_write 'docs/superpowers/other.md')"
+assert_posttool_allow "$nowt_block_output"
+
 # P4: re-editing plan while plan_reviewed=false stays on plan-review block
 write_v2_state "$STATE_FILE"
 jq '.brainstorming.spec_reviewed = true' "$STATE_FILE" > "$TMP_DIR/state.json"

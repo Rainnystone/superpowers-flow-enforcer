@@ -1353,7 +1353,7 @@ if [ "$HOOK_EVENT" = "PostToolUse" ]; then
     block_posttool "Plan 已写入，请先完成 plan review，再进入 worktree 阶段。"
   fi
 
-  if state_is_true '.planning.plan_reviewed' && ! state_is_true '.worktree.created'; then
+  if state_is_true '.planning.plan_reviewed' && state_is_true '.planning.plan_written' && ! state_is_true '.worktree.created'; then
     block_posttool "Plan 已通过 review，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。"
   fi
 

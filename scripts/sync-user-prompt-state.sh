@@ -153,6 +153,9 @@ recover_phase_from_state() {
   if jq -e '.worktree.created == true and (.worktree.baseline_verified // false) != true' "$state_file" >/dev/null 2>&1; then
     echo "worktree"; return 0
   fi
+  if jq -e '.task_flow.active_packet_role == "spec-reviewer" or .task_flow.active_packet_role == "code-reviewer"' "$state_file" >/dev/null 2>&1; then
+    echo "review"; return 0
+  fi
   if jq -e '.tdd.current_task != null or (.worktree.baseline_verified // false) == true' "$state_file" >/dev/null 2>&1; then
     echo "tdd"; return 0
   fi

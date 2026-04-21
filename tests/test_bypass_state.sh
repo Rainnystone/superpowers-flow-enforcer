@@ -1107,3 +1107,17 @@ if [ -n "$P5_ARTIFACT_SPEC_OUTPUT" ]; then
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
+
+# Codex review fix [P1]: active reviewer role should recover to "review" before tdd
+write_v2_state "$STATE_FILE"
+jq '.worktree.created = true | .worktree.baseline_verified = true | .task_flow.active_packet_role = "code-reviewer"' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_REVIEWER_ROLE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_REVIEWER_ROLE_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer reviewer-role recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"review"'
