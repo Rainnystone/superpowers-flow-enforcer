@@ -89,8 +89,8 @@ Do not load historical plans, broad spec collections, or stale tracking files by
 - `AGENTS.md` is the active instruction file for this workspace.
 - `CLAUDE.md` remains in the repo because the repository itself is a Claude Code plugin.
 - The previous implementation workstream has been archived under `archive/2026-04-superpowers-flow-enforcer-implementation/`.
-- There is currently no active root `task_plan.md`, `progress.md`, or `findings.md` surface.
-- `docs/superpowers/specs/` and `docs/superpowers/plans/` are now reserved for the next active workstream.
+- An active workstream is in progress with root `task_plan.md`, `progress.md`, and `findings.md` surfaces.
+- Active spec and plan files exist under `docs/superpowers/specs/` and `docs/superpowers/plans/` for the current workstream.
 
 ## Transition Rules
 

@@ -30,8 +30,8 @@ It covers task routing, first packet landing zones, and default verification.
 
 - The active instruction file is `AGENTS.md`.
 - The repository does not own the full workflow contract by itself; it supplements `using-superpowers` and `planning-with-files-zh`.
-- There is no current active root tracking surface after archiving the previous implementation workstream.
-- `docs/superpowers/specs/` and `docs/superpowers/plans/` are now clear for future active workstreams.
+- An active workstream is in progress: `docs/superpowers/specs/fix-p0-p1-compatibility.md` and `docs/superpowers/plans/2026-04-21-fix-p0-p1-p2-p3-compatibility.md` are the current active spec and plan surfaces.
+- Root `task_plan.md`, `progress.md`, and `findings.md` are active for the current workstream.
 - Historical implementation context for the archived workstream now lives under `archive/2026-04-superpowers-flow-enforcer-implementation/`.
 
 ## Task Routing
@@ -45,7 +45,7 @@ It covers task routing, first packet landing zones, and default verification.
 | State bootstrap or migration bug | `templates/flow_state.json.tmpl`, `scripts/init-state.sh`, `scripts/migrate-state.sh`, `tests/test_init_state.sh` |
 | PreTool gating bug for Edit, Write, AskUserQuestion, or Agent | `scripts/check-pretool-gates.sh`, related `tests/test_pretool_command_gates.sh` or focused shell tests |
 | Bash gate or command classification bug | `scripts/check-bash-command-gate.sh`, `scripts/check-bash-command-gate-node.cjs`, `tests/test_bash_command_gate.sh` |
-| PostTool, TaskCompleted, Stop, or resume bug | `scripts/sync-post-tool-state.sh`, `scripts/check-task-completed.sh`, `scripts/check-stop-review-gate.sh`, `tests/test_posttool_command_gates.sh`, `tests/test_resume_recovery_flow.sh` |
+| PostTool, TaskCompleted, Stop, or resume bug | `scripts/sync-post-tool-state.sh`, `scripts/check-task-completed.sh`, `scripts/check-stop-review-gate.sh`, `tests/test_stop_gates.sh`, `tests/test_posttool_command_gates.sh`, `tests/test_resume_recovery_flow.sh` |
 | README or workflow-doc drift | `AGENTS.md`, `documentation-governance.md`, `README.md`, then the matching scripts/tests |
 | Skill-specific plugin surface | `skills/`, then the hook or script that consumes that skill state |
 
