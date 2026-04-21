@@ -737,6 +737,14 @@ prompt_output="$(run_user_prompt 'disable enforcer')"
 assert_user_prompt_allows "$prompt_output"
 assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
 assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
+
+# Artifact fallback: no state fields but specs/ directory exists → brainstorming
+write_v2_state "$STATE_FILE"
+mkdir -p "$TMP_DIR/docs/superpowers/specs"
+touch "$TMP_DIR/docs/superpowers/specs/test-spec.md"
+prompt_output="$(CLAUDE_PROJECT_DIR="$TMP_DIR" run_user_prompt 'enable enforcer')"
+assert_user_prompt_allows "$prompt_output"
+assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
 ```
 
 Run: `bash tests/test_user_prompt_state.sh`

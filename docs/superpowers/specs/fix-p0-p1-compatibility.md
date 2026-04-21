@@ -1,32 +1,19 @@
-# SPEC: Fix P0 Naming Mismatch, P1 Shell Profile Pollution, P2 Stop Hook Phase Guard, P3 State File Corruption, and P4 Planning Review Gate
+# SPEC: Fix P0 Naming Mismatch, P1 Shell Profile Pollution, P2 Stop Hook Phase Guard, P3 State File Corruption, P4 Planning Review Gate, and P5 Midstream Activation Recovery
 
 ## Context
 
-`superpowers-flow-enforcer` is a Claude Code plugin that enforces workflow-aware hooks for the superpowers skill ecosystem. Five issues were identified during code review and active usage:
+`superpowers-flow-enforcer` is a Claude Code plugin that enforces workflow-aware hooks for the superpowers skill ecosystem. Six issues were identified during code review and active usage:
 
 1. **P0 (Blocking)**: The plugin's packet role validator rejects `code-quality-reviewer`, but `superpowers:subagent-driven-development` uses this exact role name in its prompt templates.
 2. **P1 (Stability)**: Hook scripts spawn bash without `--norc`, making them vulnerable to shell profile pollution (unconditional `echo` in `~/.bashrc`/`~/.zshrc` corrupts JSON stdout parsing).
 3. **P2 (Correctness)**: The `Stop` hook enforces review/finishing checks regardless of `current_phase`, causing a deadlock when the session stops during `brainstorming`/`planning` stages where no review records exist yet.
-4. **P4 (Design Gap)**: The PostToolUse hook treats the first canonical plan write as "planning complete" and immediately blocks for worktree creation. There is no intermediate state for "plan written but still under review/fix/re-review", making the plan review cycle incompatible with the enforced state machine.
+4. **P3 (Robustness)**: `init-state.sh` and `update-state.sh` do not validate that state file writes produce JSON objects, allowing bare scalars (e.g., `false`) to corrupt the state file.
+5. **P4 (Design Gap)**: The PostToolUse hook treats the first canonical plan write as "planning complete" and immediately blocks for worktree creation. There is no intermediate state for "plan written but still under review/fix/re-review", making the plan review cycle incompatible with the enforced state machine.
+6. **P5 (Recovery)**: When `enable enforcer` is issued mid-workstream, the enforcer sets `workflow.active = true` but does not adjust `current_phase`, leaving it at `init` even when structured state or canonical artifacts indicate the session has progressed further.
 
 ## Goals
 
-### Goal 4: Harden state file against corruption and invalid writes
-
-`init-state.sh` and `update-state.sh` both write to `.claude/flow_state.json`, but neither validates that the output is a JSON object before persisting it. A malformed or extraction-style jq expression (e.g. `--jq '.workflow.active'`) can write a bare boolean `false` back to the file. On the next session start, `init-state.sh` runs `jq empty` which accepts any valid JSON — including bare scalars — then attempts to index `.state_version` on a boolean, producing:
-
-```
-jq: error: Cannot index boolean with string "state_version"
-```
-
-**Acceptance criteria**:
-- `init-state.sh` rejects any state file whose top-level type is not `object`
-- `update-state.sh` refuses to persist a non-object jq result
-- When corruption is detected, the state file is backed up and reset from the template
-- The backup mechanism preserves the corrupted file for manual inspection
-- Existing valid state files are unaffected
-
-### Goal 1: Accept `code-quality-reviewer` as a valid packet role
+### Goal 1 (P0): Accept `code-quality-reviewer` as a valid packet role
 
 `superpowers:subagent-driven-development` defines two reviewer roles:
 - `spec-reviewer`
@@ -41,7 +28,7 @@ The plugin currently only accepts `code-reviewer`, causing a hard block when use
 - `sync-post-tool-state.sh` records `code-quality-reviewer` dispatch correctly
 - Existing `code-reviewer` support is preserved for backward compatibility
 
-### Goal 2: Prevent shell profile pollution in hook scripts
+### Goal 2 (P1): Prevent shell profile pollution in hook scripts
 
 Official Claude Code documentation warns that hooks run in non-interactive shells but still source the user's profile. Unconditional `echo` statements in `~/.bashrc` or `~/.zshrc` prepend noise to stdout, breaking JSON parsing.
 
@@ -51,7 +38,7 @@ Official Claude Code documentation warns that hooks run in non-interactive shell
 - Hook JSON output remains clean regardless of user shell configuration
 - No functional behavior changes other than the execution environment isolation
 
-### Goal 3: Add phase guard to Stop hook
+### Goal 3 (P2): Add phase guard to Stop hook
 
 The `Stop` hook (`check-stop-review-gate.sh`) currently blocks any stop when `review.tasks` is empty, even during `brainstorming` or `planning` phases where review records are not expected. It also forces `finishing-a-development-branch` when all reviews pass, even if the session hasn't reached implementation yet.
 
@@ -61,7 +48,22 @@ The `Stop` hook (`check-stop-review-gate.sh`) currently blocks any stop when `re
 - Stop hook still enforces review/finishing checks in `tdd`, `review`, and `finishing` phases
 - Completion claim verification (`fresh_passing_evidence_detected`) continues to run in all phases
 
-### Goal 5: Add plan review gate to planning phase
+### Goal 4 (P3): Harden state file against corruption and invalid writes
+
+`init-state.sh` and `update-state.sh` both write to `.claude/flow_state.json`, but neither validates that the output is a JSON object before persisting it. A malformed or extraction-style jq expression (e.g. `--jq '.workflow.active'`) can write a bare boolean `false` back to the file. On the next session start, `init-state.sh` runs `jq empty` which accepts any valid JSON — including bare scalars — then attempts to index `.state_version` on a boolean, producing:
+
+```
+jq: error: Cannot index boolean with string "state_version"
+```
+
+**Acceptance criteria**:
+- `init-state.sh` rejects any state file whose top-level type is not `object`
+- `update-state.sh` refuses to persist a non-object jq result
+- When corruption is detected, the state file is backed up and reset from the template
+- The backup mechanism preserves the corrupted file for manual inspection
+- Existing valid state files are unaffected
+
+### Goal 5 (P4): Add plan review gate to planning phase
 
 The `brainstorming` phase has a two-step gate (`spec_written` → `spec_reviewed` + `user_approved_spec`) enforced by `sync-post-tool-state.sh` and `check-pretool-gates.sh`. The `planning` phase has no equivalent gate: `sync-post-tool-state.sh` sets `.planning.plan_written = true` on the first canonical plan write, then immediately blocks all subsequent PostToolUse with "Plan 已写完，先执行 using-git-worktrees...". This makes the plan review → fix → re-review cycle impossible because any plan edit re-triggers the worktree block.
 
@@ -74,7 +76,7 @@ The `brainstorming` phase has a two-step gate (`spec_written` → `spec_reviewed
 - The `planning` state schema change is reflected in template, init, and migration logic
 - `plan_reviewed` defaults to `false` for fresh states, migrated v1 states, and existing v2 states that predate this field (safe via `// false` fallback in gate checks)
 
-### Goal 6: Midstream activation phase recovery
+### Goal 6 (P5): Midstream activation phase recovery
 
 When `enable enforcer` is issued mid-workstream, the enforcer currently only sets `workflow.active = true` without adjusting `current_phase`. This leaves `current_phase` at `init` even when structured state fields or canonical artifacts indicate the session has already progressed through brainstorming, planning, or implementation phases. The enforcer must recover the correct phase so that subsequent hooks enforce the right gates.
 
