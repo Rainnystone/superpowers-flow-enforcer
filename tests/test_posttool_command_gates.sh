@@ -110,22 +110,55 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 spec_allow_output="$(run_posttool_write 'docs/superpowers/specs/demo.md')"
 assert_posttool_allow "$spec_allow_output"
 
+# P4: canonical plan write after spec_reviewed should block with local plan-review message
 write_v2_state "$STATE_FILE"
 jq '.brainstorming.spec_reviewed = true' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
 plan_block_output="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
-assert_posttool_block "$plan_block_output" 'using-git-worktrees'
+assert_posttool_block "$plan_block_output" 'plan review'
 assert_json_equals "$STATE_FILE" '.planning.plan_written' 'true'
 assert_json_equals "$STATE_FILE" '.planning.plan_file' '"docs/superpowers/plans/demo.md"'
+assert_json_equals "$STATE_FILE" '.planning.plan_reviewed' 'false'
 
+# P4: after plan_reviewed=true and worktree created, re-writing plan is allowed
 write_v2_state "$STATE_FILE"
 jq '
   .brainstorming.spec_reviewed = true
+  | .planning.plan_reviewed = true
   | .worktree.created = true
 ' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
 plan_allow_output="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
 assert_posttool_allow "$plan_allow_output"
+
+# P4: after plan_reviewed=true, non-plan write hits existing worktree gate (not plan-review gate)
+write_v2_state "$STATE_FILE"
+jq '
+  .brainstorming.spec_reviewed = true
+  | .planning.plan_written = true
+  | .planning.plan_file = "docs/superpowers/plans/demo.md"
+  | .planning.plan_reviewed = true
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+worktree_block_output="$(run_posttool_write 'docs/superpowers/other.md')"
+assert_posttool_block "$worktree_block_output" 'worktree'
+
+# P4: re-editing plan while plan_reviewed=false stays on plan-review block
+write_v2_state "$STATE_FILE"
+jq '.brainstorming.spec_reviewed = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+plan_block_output_1="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
+assert_posttool_block "$plan_block_output_1" 'plan review'
+plan_block_output_2="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
+assert_posttool_block "$plan_block_output_2" 'plan review'
+
+# Verify both block messages are identical (no confusing drift on re-edit)
+msg_1="$(printf '%s' "$plan_block_output_1" | jq -r '.reason')"
+msg_2="$(printf '%s' "$plan_block_output_2" | jq -r '.reason')"
+if [ "$msg_1" != "$msg_2" ]; then
+  echo "FAIL: Re-edit block message drifted: '$msg_1' vs '$msg_2'" >&2
+  exit 1
+fi
 
 write_v2_state "$STATE_FILE"
 worktree_block_output="$(run_posttool_bash 'git worktree add .worktrees/demo HEAD' 'Preparing worktree (new branch '\''demo'\'')')"

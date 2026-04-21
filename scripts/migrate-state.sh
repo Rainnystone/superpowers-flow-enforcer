@@ -161,6 +161,7 @@ jq '
     "planning": {
       "plan_written": (.planning.plan_written // false),
       "plan_file": (.planning.plan_file // null),
+      "plan_reviewed": false,
       "execution_mode": (.planning.execution_mode // null)
     },
     "worktree": {

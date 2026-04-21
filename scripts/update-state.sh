@@ -75,7 +75,10 @@ if [ "${1:-}" = "--merge" ]; then
     exit 1
   fi
   tmp_file="${STATE_FILE}.tmp"
-  jq -s '.[0] * .[1]' "$STATE_FILE" <(echo "$payload") > "$tmp_file"
+  payload_tmp_file="${STATE_FILE}.merge.tmp"
+  printf '%s\n' "$payload" > "$payload_tmp_file"
+  jq -s '.[0] * .[1]' "$STATE_FILE" "$payload_tmp_file" > "$tmp_file"
+  rm -f "$payload_tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   echo '{"success":true}'
   exit 0
