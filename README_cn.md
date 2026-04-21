@@ -89,7 +89,7 @@
 | PostToolUse | * | 工作流状态同步，包括成功的 Agent 派发后的 task_flow 更新 |
 | TaskCompleted | * | 仅在 workflow 激活时要求两阶段审查完成 |
 | PostToolUseFailure | Bash | 测试失败时系统化调试 |
-| Stop | * | 仅 command-only 完成验证，依据 `last_assistant_message` + workflow-aware 停止门禁 |
+| Stop | * | 仅 command-only 完成验证，依据 `last_assistant_message` + workflow-aware 停止门禁（phase guard：仅在 `tdd`/`review`/`finishing` 阶段检查 review） |
 
 ## TDD 强制执行（最关键）
 
@@ -113,6 +113,16 @@ PreToolUse hook 执行 TDD 铁律：
 - 通过 PreToolUse 的路径白名单规则处理
 - 类别: config, types, docs, generated, specs, plugin
 
+## Plan Review 门禁
+
+计划写入后，必须通过 plan review 才能继续创建 worktree。状态文件中通过 `planning.plan_reviewed` 追踪。记录通过的命令：
+
+```bash
+bash scripts/record-plan-state.sh plan-reviewed pass
+```
+
+这个门禁防止计划未经审查就进入 worktree 创建阶段。
+
 ## Packetized Subagent Execution
 
 这不是全局禁用 Agent，而是一个 `PreToolUse/Agent` 的 command hook，只在 superpowers 的 packetized execution 已经进入执行态时约束任务边界。
@@ -122,10 +132,12 @@ PreToolUse hook 执行 TDD 铁律：
 - `SPFE_TASK_ID=<task-id>`
 - `SPFE_PACKET_ROLE=implementer|spec-reviewer|code-reviewer`
 
+别名 `code-quality-reviewer` 也被接受，内部会标准化为 `code-reviewer`。
+
 强制规则如下：
 
 - 当前 open task 只有在 `spec_review_passed == true` 且 `code_review_passed == true` 后，才允许派发下一个任务的 `implementer`。
-- `spec-reviewer` 和 `code-reviewer` 必须是两个独立 reviewer 角色；合并 reviewer 或泛化 reviewer 包会被拒绝。
+- `spec-reviewer` 和 `code-reviewer` 必须是两个独立 reviewer 角色；合并 reviewer 或泛化 reviewer 包会被拒绝。别名 `code-quality-reviewer` 也被接受，内部标准化为 `code-reviewer`。
 - 当前任务 spec review 还没通过时，不允许先派发 `code-reviewer`。
 - 同一任务内的 `implementer -> fix -> re-review` 循环会继续放行，因此 review 意见可以在不新开任务的情况下闭环。
 
@@ -176,6 +188,8 @@ PreToolUse hook 执行 TDD 铁律：
 - `resume.recovery_completed_at`
 - `resume.last_resume_source`
 
+**中途激活（Midstream activation）**：当 workflow 已经在进行中时通过 `enable enforcer` 激活 enforcer，hook 会从结构化状态字段恢复当前阶段，而不是默认回退到 `init`。手动启用不会清除 resume gate——如果 `resume.recovery_required` 已设置，恢复握手仍需完成。
+
 ## 完成前验证
 
 声明完成时（"完成", "tests pass", "修复了"）：
@@ -207,6 +221,7 @@ scripts/
 ├── check-bash-command-gate-node.cjs # vendored bash-traverse 分析 runtime
 ├── check-task-completed.sh # TaskCompleted gate
 ├── check-stop-review-gate.sh # Stop 完成验证 gate
+├── record-plan-state.sh      # Plan review 状态记录
 └── check-exception.sh # 历史辅助脚本（当前 hooks 不调用）
 templates/
 └── flow_state.json.tmpl # 状态文件模板
@@ -222,7 +237,7 @@ vendor/
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
 - `workflow.*`: `active`、`override`、`activated_by`、`activated_at`、`deactivated_by`、`deactivated_at`
 - `brainstorming.*`: `question_asked`、`findings_updated_after_question`、`spec_written`、`spec_reviewed`、`user_approved_spec`
-- `planning.*`: `plan_written`、`plan_file`、`execution_mode`
+- `planning.*`: `plan_written`、`plan_file`、`execution_mode`、`plan_reviewed`
 - `worktree.*`: `created`、`path`、`baseline_verified`
 - `tdd.*`: `pending_failure_record`、`last_failed_command`、`test_files_created`、`production_files_written`、`tests_verified_fail`、`tests_verified_pass`
 - `task_flow.*`: `active_task_id`、`active_packet_role`、`last_dispatch_at`

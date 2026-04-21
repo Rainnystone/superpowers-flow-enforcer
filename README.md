@@ -89,7 +89,7 @@ Prompts such as `Please enable enforcer, thanks` or `disable enforcer and stop f
 | PostToolUse | * | Workflow state sync, including successful Agent dispatch task-flow updates |
 | TaskCompleted | * | Two-stage review completion when workflow is active |
 | PostToolUseFailure | Bash | Systematic debugging on test failure |
-| Stop | * | Command-only completion verification from `last_assistant_message` + workflow-aware stop gate |
+| Stop | * | Command-only completion verification from `last_assistant_message` + workflow-aware stop gate with phase guard (review checks only in `tdd`/`review`/`finishing`) |
 
 ## TDD Enforcement (Most Critical)
 
@@ -113,6 +113,16 @@ When writing a production file (e.g., `src/utils/helper.ts`):
 - Handled by the PreToolUse path allow-list rules
 - Categories: config, types, docs, generated, specs, plugin
 
+## Plan Review Gate
+
+After a plan is written, it must pass a plan review before worktree creation can proceed. This is tracked via `planning.plan_reviewed` in the state file. To record a passed review:
+
+```bash
+bash scripts/record-plan-state.sh plan-reviewed pass
+```
+
+This gate prevents premature worktree creation when the plan has not been reviewed.
+
 ## Packetized Subagent Execution
 
 This gate is not a global Agent ban. It is a `PreToolUse/Agent` command hook that only constrains packetized superpowers execution once the workflow and task flow are active.
@@ -122,10 +132,12 @@ Runtime Agent prompts must start with:
 - `SPFE_TASK_ID=<task-id>`
 - `SPFE_PACKET_ROLE=implementer|spec-reviewer|code-reviewer`
 
+The alias `code-quality-reviewer` is also accepted and is normalized internally to `code-reviewer`.
+
 Enforced behavior:
 
 - A new task's `implementer` packet is blocked until the current open task has both `spec_review_passed == true` and `code_review_passed == true`.
-- `spec-reviewer` and `code-reviewer` are separate reviewer roles; a combined or generic reviewer packet is rejected.
+- `spec-reviewer` and `code-reviewer` are separate reviewer roles; a combined or generic reviewer packet is rejected. The alias `code-quality-reviewer` is also accepted and normalized to `code-reviewer`.
 - `code-reviewer` cannot start before the current task has passed spec review.
 - Same-task `implementer -> fix -> re-review` loops remain allowed, so review feedback can be addressed without reopening a new task.
 
@@ -177,6 +189,8 @@ State tracking for resumed workflows includes:
 - `resume.recovery_completed_at`
 - `resume.last_resume_source`
 
+**Midstream activation**: When the enforcer is activated via `enable enforcer` while a workflow is already in progress, the hook recovers the current phase from structured state fields rather than defaulting to `init`. Manual enable does not clear the resume gate -- if `resume.recovery_required` is set, the resume handshake still needs to complete.
+
 ## Verification Before Completion
 
 When claiming completion ("done", "tests pass", "fixed"):
@@ -206,6 +220,7 @@ scripts/
 ├── check-bash-command-gate-node.cjs # Vendored bash-traverse analysis runtime
 ├── check-task-completed.sh # TaskCompleted gate
 ├── check-stop-review-gate.sh # Stop completion verification gate
+├── record-plan-state.sh      # Plan review status recording
 └── check-exception.sh # Legacy helper script (not called by current hooks)
 templates/
 └── flow_state.json.tmpl # State file template
@@ -221,7 +236,7 @@ Tracks:
 - `current_phase`: init → brainstorming → planning → tdd → review → finishing
 - `workflow.*`: `active`, `override`, `activated_by`, `activated_at`, `deactivated_by`, `deactivated_at`
 - `brainstorming.*`: `question_asked`, `findings_updated_after_question`, `spec_written`, `spec_reviewed`, `user_approved_spec`
-- `planning.*`: `plan_written`, `plan_file`, `execution_mode`
+- `planning.*`: `plan_written`, `plan_file`, `execution_mode`, `plan_reviewed`
 - `worktree.*`: `created`, `path`, `baseline_verified`
 - `tdd.*`: `pending_failure_record`, `last_failed_command`, `test_files_created`, `production_files_written`, `tests_verified_fail`, `tests_verified_pass`
 - `task_flow.*`: `active_task_id`, `active_packet_role`, `last_dispatch_at`
