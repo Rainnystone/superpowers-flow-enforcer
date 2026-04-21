@@ -81,7 +81,10 @@ The `brainstorming` phase has a two-step gate (`spec_written` → `spec_reviewed
 - No `if` field optimization on Bash matcher (out of scope for this fix)
 - No changes to `sha256sum || shasum` fallback logic (already verified safe)
 - No changes to plugin dev mode or hook lifecycle (platform limitation, not fixable in this repo)
-- No midstream activation phase recovery rules (e.g., inferring current phase from existing canonical files when `enable enforcer` is issued mid-workstream). The current behavior trusts the existing `.claude/flow_state.json` as-is. Phase recovery semantics can be defined in a future workstream.
+- No midstream activation phase recovery rules. If `enable enforcer` is issued mid-workstream, the current behavior trusts the existing `.claude/flow_state.json` as-is. Any future phase recovery must obey this constraint:
+  - **State first**: recovery decisions must be based solely on structured state fields (e.g., `.brainstorming.spec_written`, `.brainstorming.spec_reviewed`, `.planning.plan_written`, `.planning.plan_reviewed`, `.worktree.created`, `.worktree.baseline_verified`, `.resume.recovery_required`).
+  - **Deterministic artifacts second**: canonical file existence (`docs/superpowers/specs/*.md`, `docs/superpowers/plans/*.md`) may be used as a fallback only when the state file lacks the relevant field.
+  - **No natural-language inference**: workflow phase must never be inferred from free-form user prompts, assistant prose, or keyword matching. This prevents an unbounded keyword-enumeration problem and keeps recovery logic finite, auditable, and testable.
 
 ## Design
 
