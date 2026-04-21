@@ -186,7 +186,7 @@ emit_success() {
 }
 
 if [ -f "$STATE_FILE" ]; then
-  if ! jq empty "$STATE_FILE" >/dev/null 2>&1; then
+  if ! jq -e 'type == "object"' "$STATE_FILE" >/dev/null 2>&1; then
     backup_and_reset_state
     echo "{\"continue\": true, \"systemMessage\": \"Flow state backed up and reset at $STATE_FILE\"}"
     exit 0

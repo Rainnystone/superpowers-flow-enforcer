@@ -90,6 +90,10 @@ record_successful_agent_dispatch() {
   packet_task_id="$(printf '%s' "$packet_metadata" | jq -r '.task_id // ""')"
   packet_role="$(printf '%s' "$packet_metadata" | jq -r '.role // ""')"
 
+  if [ "$packet_role" = "code-quality-reviewer" ]; then
+    packet_role="code-reviewer"
+  fi
+
   if [ -z "$packet_task_id" ] || [ -z "$packet_role" ]; then
     return
   fi
@@ -1264,6 +1268,7 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
         .current_phase = "planning"
         | .planning.plan_written = true
         | .planning.plan_file = $path
+        | .planning.plan_reviewed = false
         | .workflow.active = true
         | .workflow.activated_by = "plan_write"
         | .workflow.activated_at = $now
@@ -1344,8 +1349,12 @@ if [ "$HOOK_EVENT" = "PostToolUse" ]; then
     block_posttool "SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。"
   fi
 
-  if [ "$PLAN_WRITE_RECORDED" = "true" ] && ! state_is_true '.worktree.created'; then
-    block_posttool "Plan 已写完，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。"
+  if [ "$PLAN_WRITE_RECORDED" = "true" ] && ! state_is_true '.planning.plan_reviewed' && ! state_is_true '.worktree.created'; then
+    block_posttool "Plan 已写入，请先完成 plan review，再进入 worktree 阶段。"
+  fi
+
+  if state_is_true '.planning.plan_reviewed' && state_is_true '.planning.plan_written' && ! state_is_true '.worktree.created'; then
+    block_posttool "Plan 已通过 review，先执行 using-git-worktrees 创建隔离工作区并跑 baseline tests。"
   fi
 
   if [ "$WORKTREE_ADD_RECORDED" = "true" ] && ! state_is_true '.worktree.baseline_verified'; then

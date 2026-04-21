@@ -952,3 +952,63 @@ if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_
   echo "Expected migrate-state.sh --check-safe to reject invalid resume field types" >&2
   exit 1
 fi
+
+# P3: State file corruption guard tests
+
+P3_TMP_DIR="$(mktemp -d)"
+P3_STATE_FILE="$P3_TMP_DIR/.claude/flow_state.json"
+P3_TEMPLATE="${CLAUDE_PLUGIN_ROOT}/templates/flow_state.json.tmpl"
+mkdir -p "$P3_TMP_DIR/.claude"
+
+# Test: bare boolean false should trigger backup + reset
+printf 'false' > "$P3_STATE_FILE"
+output="$(echo '{}' | CLAUDE_PROJECT_DIR="$P3_TMP_DIR" CLAUDE_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT" bash "$CLAUDE_PLUGIN_ROOT/scripts/init-state.sh")"
+if [ ! -f "$P3_STATE_FILE.bak" ]; then
+  echo "FAIL: Expected .bak file to be created for corrupted state" >&2
+  exit 1
+fi
+if ! jq -e 'type == "object"' "$P3_STATE_FILE" >/dev/null 2>&1; then
+  echo "FAIL: Expected state file to be reset to valid object" >&2
+  exit 1
+fi
+
+# Test: bare string should trigger backup + reset
+printf '"corrupted"' > "$P3_STATE_FILE"
+rm -f "$P3_STATE_FILE.bak"
+output="$(echo '{}' | CLAUDE_PROJECT_DIR="$P3_TMP_DIR" CLAUDE_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT" bash "$CLAUDE_PLUGIN_ROOT/scripts/init-state.sh")"
+if [ ! -f "$P3_STATE_FILE.bak" ]; then
+  echo "FAIL: Expected .bak file for string-corrupted state" >&2
+  exit 1
+fi
+
+# Test: valid v2 object should NOT be reset
+cp "$P3_TEMPLATE" "$P3_STATE_FILE"
+rm -f "$P3_STATE_FILE.bak"
+output="$(echo '{}' | CLAUDE_PROJECT_DIR="$P3_TMP_DIR" CLAUDE_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT" bash "$CLAUDE_PLUGIN_ROOT/scripts/init-state.sh")"
+if [ -f "$P3_STATE_FILE.bak" ]; then
+  echo "FAIL: Valid state should not trigger backup" >&2
+  exit 1
+fi
+
+# Test: update-state.sh should reject non-object jq results
+cp "$P3_TEMPLATE" "$P3_STATE_FILE"
+if CLAUDE_PROJECT_DIR="$P3_TMP_DIR" bash "$CLAUDE_PLUGIN_ROOT/scripts/update-state.sh" --jq '.workflow.active' >/dev/null 2>&1; then
+  echo "FAIL: update-state.sh should abort when jq produces non-object" >&2
+  exit 1
+fi
+if ! jq -e '.workflow.active == false' "$P3_STATE_FILE" >/dev/null 2>&1; then
+  echo "FAIL: Original state should be untouched after aborted update" >&2
+  exit 1
+fi
+
+# Test: update-state.sh normal object mutation should succeed
+if ! CLAUDE_PROJECT_DIR="$P3_TMP_DIR" bash "$CLAUDE_PLUGIN_ROOT/scripts/update-state.sh" --jq '.workflow.active = true' >/dev/null 2>&1; then
+  echo "FAIL: update-state.sh should succeed for object mutation" >&2
+  exit 1
+fi
+if ! jq -e '.workflow.active == true' "$P3_STATE_FILE" >/dev/null 2>&1; then
+  echo "FAIL: Object mutation should persist" >&2
+  exit 1
+fi
+
+rm -rf "$P3_TMP_DIR"

@@ -193,7 +193,7 @@ assert_pretool_deny() {
   }
   assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.hookEventName' '"PreToolUse"'
   assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.permissionDecision' '"deny"'
-  jq -e --arg frag "$reason_fragment" '.hookSpecificOutput.permissionDecisionReason | contains($frag)' <(printf '%s' "$output") >/dev/null 2>&1 || {
+  printf '%s' "$output" | jq -e --arg frag "$reason_fragment" '.hookSpecificOutput.permissionDecisionReason | contains($frag)' >/dev/null 2>&1 || {
     echo "Expected deny reason to contain: $reason_fragment" >&2
     exit 1
   }
@@ -435,3 +435,29 @@ assert_json_equals "$STATE_FILE" '.task_flow.active_task_id' '"task-sync-followu
 assert_json_equals "$STATE_FILE" '.task_flow.active_packet_role' '"implementer"'
 assert_json_equals "$STATE_FILE" '.review.tasks["task-sync-followup-1"].spec_review_passed' 'true'
 assert_json_equals "$STATE_FILE" '.review.tasks["task-sync-followup-1"].code_review_passed' 'true'
+
+# P0: code-quality-reviewer alias tests
+
+write_v2_state "$STATE_FILE"
+jq '
+  .workflow.active = true
+  | .worktree.created = true
+  | .worktree.baseline_verified = true
+  | .task_flow.active_task_id = "task-alias-1"
+  | .review.tasks["task-alias-1"] = {spec_review_passed:true, code_review_passed:false}
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+
+# Test 1a: code-quality-reviewer should be allowed when spec review passed
+allow_output="$(run_agent_gate $'SPFE_TASK_ID=task-alias-1\nSPFE_PACKET_ROLE=code-quality-reviewer\n\nCode quality review after spec pass.')"
+assert_pretool_allow "$allow_output"
+
+# Test 1b: code-reviewer should still work (regression)
+allow_output="$(run_agent_gate $'SPFE_TASK_ID=task-alias-1\nSPFE_PACKET_ROLE=code-reviewer\n\nCode review after spec pass.')"
+assert_pretool_allow "$allow_output"
+
+# Test 1c: sync-post-tool-state.sh should normalize code-quality-reviewer to code-reviewer
+write_v2_state "$STATE_FILE"
+posttool_output="$(run_posttool_agent_dispatch 'task-alias-2' 'code-quality-reviewer')"
+assert_posttool_allow "$posttool_output"
+assert_json_equals "$STATE_FILE" '.task_flow.active_packet_role' '"code-reviewer"'

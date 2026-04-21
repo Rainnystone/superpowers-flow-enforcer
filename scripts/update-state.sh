@@ -31,6 +31,13 @@ write_tmp_and_swap() {
   local tmp_file
   tmp_file="${STATE_FILE}.tmp"
   jq "$expr" "$STATE_FILE" > "$tmp_file"
+
+  if ! jq -e 'type == "object"' "$tmp_file" >/dev/null 2>&1; then
+    echo '{"error":"State mutation produced non-object JSON; aborting to prevent corruption"}'
+    rm -f "$tmp_file"
+    exit 1
+  fi
+
   mv "$tmp_file" "$STATE_FILE"
 }
 
@@ -68,7 +75,10 @@ if [ "${1:-}" = "--merge" ]; then
     exit 1
   fi
   tmp_file="${STATE_FILE}.tmp"
-  jq -s '.[0] * .[1]' "$STATE_FILE" <(echo "$payload") > "$tmp_file"
+  payload_tmp_file="${STATE_FILE}.merge.tmp"
+  printf '%s\n' "$payload" > "$payload_tmp_file"
+  jq -s '.[0] * .[1]' "$STATE_FILE" "$payload_tmp_file" > "$tmp_file"
+  rm -f "$payload_tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   echo '{"success":true}'
   exit 0

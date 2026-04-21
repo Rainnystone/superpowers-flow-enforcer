@@ -20,7 +20,7 @@ assert_stop_block() {
 
   assert_json_equals <(printf '%s' "$output") '.decision' '"block"'
   assert_json_equals <(printf '%s' "$output") '. | keys | sort' '["decision","reason"]'
-  jq -e --arg frag "$reason_fragment" '.reason | contains($frag)' <(printf '%s' "$output") >/dev/null 2>&1 || {
+  printf '%s' "$output" | jq -e --arg frag "$reason_fragment" '.reason | contains($frag)' >/dev/null 2>&1 || {
     echo "Expected Stop block reason to contain: $reason_fragment" >&2
     exit 1
   }
@@ -67,7 +67,7 @@ mv "$TMP_DIR/fallback-state.json" "$FALLBACK_PROJECT/.claude/flow_state.json"
 
 export CLAUDE_PROJECT_DIR="$PRIMARY_PROJECT"
 write_v2_state "$STATE_FILE"
-jq '.workflow.active = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+jq '.workflow.active = true | .current_phase = "tdd"' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
 
 deny_output="$(run_stop_gate "$FALLBACK_PROJECT")"
@@ -131,7 +131,7 @@ deny_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'Done. I fixed it and ever
 assert_stop_block "$deny_output" 'verification'
 
 write_v2_state "$STATE_FILE"
-jq '.workflow.active = true' "$STATE_FILE" > "$TMP_DIR/state.json"
+jq '.workflow.active = true | .current_phase = "tdd"' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
 
 deny_output="$(run_stop_gate "$PRIMARY_PROJECT")"
@@ -145,6 +145,7 @@ export CLAUDE_PROJECT_DIR="$PRIMARY_PROJECT"
 write_v2_state "$STATE_FILE"
 jq '
   .workflow.active = true
+  | .current_phase = "review"
   | .review.tasks = {
       "task-001": {
         "spec_review_passed": true,
@@ -210,3 +211,47 @@ assert_stop_allow_silent "$allow_output"
 rm -f "$STATE_FILE"
 allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
 assert_stop_allow_silent "$allow_output"
+
+# P2: Stop hook phase guard tests
+
+# brainstorming phase with empty review.tasks should allow stop
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .current_phase = "brainstorming"' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
+assert_stop_allow_silent "$allow_output"
+
+# planning phase with empty review.tasks should allow stop
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .current_phase = "planning"' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
+assert_stop_allow_silent "$allow_output"
+
+# tdd phase with empty review.tasks should still block
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .current_phase = "tdd"' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+deny_output="$(run_stop_gate "$PRIMARY_PROJECT")"
+assert_stop_block "$deny_output" 'review'
+
+# review phase with all reviews passed but finishing not invoked should block
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .current_phase = "review" | .review.tasks = {"task-001": {"spec_review_passed": true, "code_review_passed": true}}' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+deny_output="$(run_stop_gate "$PRIMARY_PROJECT")"
+assert_stop_block "$deny_output" 'finishing'
+
+# finishing phase with all reviews passed but finishing not invoked should block
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .current_phase = "finishing" | .review.tasks = {"task-001": {"spec_review_passed": true, "code_review_passed": true}}' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+deny_output="$(run_stop_gate "$PRIMARY_PROJECT")"
+assert_stop_block "$deny_output" 'finishing'
+
+# Regression: completion claim check still works in brainstorming phase
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | .current_phase = "brainstorming"' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+deny_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'Done. I fixed it and everything is working now.')"
+assert_stop_block "$deny_output" 'verification'

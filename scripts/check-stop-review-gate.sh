@@ -164,14 +164,18 @@ if ! state_expr_is_true '.workflow.active'; then
   exit 0
 fi
 
+CURRENT_PHASE="$(jq -r '.current_phase // "init"' "$STATE_FILE")"
+
 SKIP_REVIEW_CONFIRMED=false
 if state_expr_is_true '.exceptions.skip_review' && state_expr_is_true '.exceptions.user_confirmed'; then
   SKIP_REVIEW_CONFIRMED=true
 fi
 
-if [ "$SKIP_REVIEW_CONFIRMED" != true ] && ! has_review_records; then
-  block_stop '还没有 review 记录，先执行 requesting-code-review 的两阶段评审。'
-  exit 0
+if [ "$CURRENT_PHASE" = "tdd" ] || [ "$CURRENT_PHASE" = "review" ] || [ "$CURRENT_PHASE" = "finishing" ]; then
+  if [ "$SKIP_REVIEW_CONFIRMED" != true ] && ! has_review_records; then
+    block_stop '还没有 review 记录，先执行 requesting-code-review 的两阶段评审。'
+    exit 0
+  fi
 fi
 
 SKIP_FINISHING_CONFIRMED=false
@@ -179,9 +183,11 @@ if state_expr_is_true '.exceptions.skip_finishing' && state_expr_is_true '.excep
   SKIP_FINISHING_CONFIRMED=true
 fi
 
-if [ "$SKIP_FINISHING_CONFIRMED" != true ] && all_reviews_passed && ! state_expr_is_true '.finishing.invoked'; then
-  block_stop '所有任务都已 review，通过后还需执行 finishing-a-development-branch。'
-  exit 0
+if [ "$CURRENT_PHASE" = "review" ] || [ "$CURRENT_PHASE" = "finishing" ]; then
+  if [ "$SKIP_FINISHING_CONFIRMED" != true ] && all_reviews_passed && ! state_expr_is_true '.finishing.invoked'; then
+    block_stop '所有任务都已 review，通过后还需执行 finishing-a-development-branch。'
+    exit 0
+  fi
 fi
 
 LAST_ASSISTANT_MESSAGE="$(input_string '.last_assistant_message')"
