@@ -1,18 +1,18 @@
-# Fix P0 Naming Mismatch, P1 Shell Profile Pollution, P2 Stop Hook Phase Guard, P3 State File Corruption, P4 Planning Review Gate
+# Fix P0 Role Alias, Correct P1 Scope, P2 Stop Hook Phase Guard, P3 State File Corruption, P4 Local Planning Hold, and P5 Midstream Activation Recovery
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix six blocking/stability/design-gap issues in the superpowers-flow-enforcer plugin: accept `code-quality-reviewer` as a role alias, isolate hooks from shell profile pollution via `--norc`, add phase-aware guards to the Stop hook, harden state file writes against corruption, add a plan review intermediate state to the planning phase, and recover the correct `current_phase` when `enable enforcer` is issued mid-workstream.
+**Goal:** Fix six spec/contract issues in the superpowers-flow-enforcer plugin: accept `code-quality-reviewer` as a compatibility alias, correct the repo's P1 scope around Claude Code hook profile pollution, add phase-aware guards to the Stop hook, harden state file writes against corruption, add a repo-local plan-review hold before the existing worktree gate, and recover the correct `current_phase` when `enable enforcer` is issued mid-workstream without breaking resume recovery.
 
-**Architecture:** Minimal delta changes across ten source files plus five test files. P0 adds a normalization layer at validation boundaries. P1 injects `--norc` into the existing `hooks.json` command pattern. P2 gates two restrictive checks in `check-stop-review-gate.sh` behind `current_phase` conditions. P3 adds JSON object type guards in `init-state.sh` and `update-state.sh`. P4 inserts a `plan_reviewed` state field and a two-step planning gate (plan review → worktree) into `sync-post-tool-state.sh`, `templates/flow_state.json.tmpl`, `migrate-state.sh`, and `record-plan-state.sh`. P5 adds `recover_phase_from_state` to `sync-user-prompt-state.sh` for midstream activation.
+**Architecture:** Minimal delta changes across hook/state scripts, tests, and active docs. P0 adds a normalization layer at validation boundaries. P1 becomes docs/troubleshooting sync because the real pollution path is outside the plugin's inner bash invocation boundary. P2 gates two restrictive checks in `check-stop-review-gate.sh` behind `current_phase` conditions. P3 adds JSON object type guards in `init-state.sh` and `update-state.sh`. P4 inserts a repo-local `plan_reviewed` state field and a two-step local planning hold (plan review → existing worktree gate) into `sync-post-tool-state.sh`, `templates/flow_state.json.tmpl`, `migrate-state.sh`, and `record-plan-state.sh`. P5 adds resume-safe phase recovery to `sync-user-prompt-state.sh` and reuses existing canonical path semantics for artifact fallback.
 
 **Tech Stack:** Bash 4.0+, jq, python3 (for inline JSON parsing in task_flow_packets.sh)
 
 ---
 
-## Packet 1: P0 — `code-quality-reviewer` alias support
+## Packet 1: P0 — `code-quality-reviewer` compatibility alias support
 
-**User-facing goal:** Users following the official superpowers prompt templates can dispatch `SPFE_PACKET_ROLE=code-quality-reviewer` without being blocked by the PreToolUse/Agent gate.
+**User-facing goal:** Sessions that use `SPFE_PACKET_ROLE=code-quality-reviewer` as a compatibility spelling are not blocked by the PreToolUse/Agent gate, while `code-reviewer` remains the primary internal role.
 
 **Owned files:**
 - Modify: `scripts/lib/task_flow_packets.sh` (3 Python inline scripts)
@@ -128,75 +128,57 @@ git commit -m "feat(p0): accept code-quality-reviewer as code-reviewer alias"
 
 ---
 
-## Packet 2: P1 — `--norc` shell profile isolation
+## Packet 2: P1 — Correct the documented scope of hook profile pollution
 
-**User-facing goal:** Hook scripts remain resilient to users whose shell profiles contain unconditional `echo` statements.
+**User-facing goal:** The repo stops claiming an unsupported `--norc` fix for Claude Code hook profile pollution, and instead tells users the official mitigation.
 
 **Owned files:**
-- Modify: `hooks/hooks.json`
-- Modify: `tests/test_pretool_command_gates.sh` (behavioral anti-pollution test)
+- Modify: `README.md`
+- Modify: `README_cn.md`
+- Modify: `CLAUDE.md`
+- Verify: `tests/test_hooks_official_events.sh` (no hook command-string regression; `hooks/hooks.json` should stay unchanged)
 
-**Parallel safety:** Safe to run in parallel with Packet 1 (no shared test file). Can run in parallel with Packet 3 and Packet 4.
+**Parallel safety:** Safe to run in parallel with Packets 1, 3, and 4. It must not edit `hooks/hooks.json`.
 
-**Default verification:** `bash tests/test_pretool_command_gates.sh && jq empty hooks/hooks.json`
+**Default verification:** `bash tests/test_hooks_official_events.sh && rg -n 'interactive|交互|~/.zshrc|~/.bashrc|JSON validation failed|profile' README.md README_cn.md CLAUDE.md`
 
-- [ ] **Step 1: Write failing test (RED)**
+- [ ] **Step 1: Update active docs**
 
-Append to `tests/test_pretool_command_gates.sh`:
+Add/adjust wording in `README.md`, `README_cn.md`, and `CLAUDE.md` so they all say:
+
+- Claude Code sources the user's shell profile before the configured hook command runs.
+- Unconditional `echo` in `~/.zshrc` / `~/.bashrc` can prepend noise before hook JSON.
+- The supported mitigation is to guard that output so it only runs in interactive shells, for example:
 
 ```bash
-# P1: --norc behavioral isolation test
-TMP_DIR="$(mktemp -d)"
-trap 'rm -rf "$TMP_DIR"' EXIT
-
-# Create a fake rcfile with stdout pollution
-FAKE_RC="$TMP_DIR/.bashrc"
-echo 'echo "PROFILE_POLLUTION"' > "$FAKE_RC"
-
-# Use --rcfile to force rcfile loading, proving pollution reaches stdout
-polluted_output="$(bash --rcfile "$FAKE_RC" -i -c 'echo "{\"test\":true}"' 2>/dev/null)"
-if ! echo "$polluted_output" | grep -q "PROFILE_POLLUTION"; then
-  echo "SKIP: Could not reproduce rcfile pollution via --rcfile on this environment" >&2
-else
-  # Prove --norc suppresses rcfile loading even when --rcfile is specified
-  clean_output="$(bash --norc --rcfile "$FAKE_RC" -i -c 'echo "{\"test\":true}"' 2>/dev/null)"
-  if echo "$clean_output" | grep -q "PROFILE_POLLUTION"; then
-    echo "FAIL: bash --norc failed to suppress rcfile pollution" >&2
-    exit 1
-  fi
-  if ! echo "$clean_output" | jq empty >/dev/null 2>&1; then
-    echo "FAIL: Clean output is not valid JSON" >&2
-    exit 1
-  fi
-fi
-
-# Verify hooks.json contains --norc in all commands
-if ! grep -q 'bash --norc' hooks/hooks.json; then
-  echo "FAIL: hooks.json commands must use bash --norc" >&2
-  exit 1
+if [[ $- == *i* ]]; then
+  echo "Shell ready"
 fi
 ```
 
-Run: `bash tests/test_pretool_command_gates.sh`
-Expected: FAIL at `--norc` suppression check (hooks.json not yet updated).
+- This repo does **not** claim that changing `hooks/hooks.json` to `bash --norc ...` fixes that outer-shell behavior.
 
-- [ ] **Step 2: Implement `--norc` in `hooks.json`**
+- [ ] **Step 2: Keep hook wiring unchanged**
 
-Replace every `bash ${CLAUDE_PLUGIN_ROOT}` with `bash --norc ${CLAUDE_PLUGIN_ROOT}` in all 10 command entries.
+Do **not** edit `hooks/hooks.json` in this packet. The purpose of this packet is to remove an incorrect remediation, not to ship an unverified hook-runtime change.
 
-- [ ] **Step 3: Verify tests pass (GREEN)**
+- [ ] **Step 3: Verify docs and hook wiring (GREEN)**
 
-Run: `bash tests/test_pretool_command_gates.sh && jq empty hooks/hooks.json`
-Expected: Both PASS.
+Run: `bash tests/test_hooks_official_events.sh`
+Expected: PASS (no hook command strings changed).
+
+Run:
+```bash
+rg -n 'interactive|交互|~/.zshrc|~/.bashrc|JSON validation failed|profile' README.md README_cn.md CLAUDE.md
+```
+Expected: The three active docs contain the official mitigation guidance.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add hooks/hooks.json tests/test_pretool_command_gates.sh
-git commit -m "feat(p1): isolate hooks from shell profile pollution with --norc"
+git add README.md README_cn.md CLAUDE.md
+git commit -m "docs(p1): document Claude Code hook profile pollution as runtime limitation"
 ```
-
-Note: The `--rcfile` test proves that `bash --norc` reliably suppresses rcfile pollution at the shell behavior level. This is an approximation of the full Claude Code hook runtime, which spawns bash in a way that sources the user's profile. A complete end-to-end test would require simulating the Claude Code hook launcher, which is outside this plugin's test scope.
 
 ---
 
@@ -452,13 +434,13 @@ git commit -m "feat(p3): guard state file against corruption with object type ch
 
 ---
 
-## Packet 5: P4 — Planning review gate
+## Packet 5: P4 — Repo-local plan-review hold before worktree
 
-**User-facing goal:** After a canonical plan write, the session can enter a plan review / fix / re-review cycle before being forced to create a git worktree. The planning phase now has the same two-step gate pattern as brainstorming (written → reviewed → next phase).
+**User-facing goal:** After a canonical plan write, the session can stay in a local plan review / fix / re-review loop before the existing worktree gate resumes. This is a repo-local enforcer extension, not a claim about upstream superpowers ordering.
 
 **Owned files:**
 - Modify: `templates/flow_state.json.tmpl` (add `plan_reviewed` field)
-- Modify: `scripts/sync-post-tool-state.sh` (set `plan_reviewed = false` on write; split single worktree gate into two-step gate)
+- Modify: `scripts/sync-post-tool-state.sh` (set `plan_reviewed = false` on write; split single worktree gate into local plan-review hold + existing worktree gate)
 - Modify: `scripts/migrate-state.sh` (bootstrap `plan_reviewed` default for v1→v2 migration)
 - Create: `scripts/record-plan-state.sh` (write entry for `plan_reviewed`, mirrors `record-spec-state.sh`)
 - Modify: `tests/test_posttool_command_gates.sh` (update plan-write assertions to expect plan-review block, add worktree gate test after plan_reviewed=true)
@@ -473,7 +455,7 @@ git commit -m "feat(p3): guard state file against corruption with object type ch
 In `tests/test_posttool_command_gates.sh`, update the existing plan-write assertions (around lines 113–128):
 
 ```bash
-# P4: plan write after spec_reviewed should block with plan-review message
+# P4: canonical plan write after spec_reviewed should block with local plan-review message
 write_v2_state "$STATE_FILE"
 jq '.brainstorming.spec_reviewed = true' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
@@ -483,7 +465,7 @@ assert_json_equals "$STATE_FILE" '.planning.plan_written' 'true'
 assert_json_equals "$STATE_FILE" '.planning.plan_file' '"docs/superpowers/plans/demo.md"'
 assert_json_equals "$STATE_FILE" '.planning.plan_reviewed' 'false'
 
-# P4: after plan_reviewed=true, non-plan write hits worktree gate (not plan-review gate)
+# P4: after plan_reviewed=true, non-plan write hits existing worktree gate (not plan-review gate)
 write_v2_state "$STATE_FILE"
 jq '
   .brainstorming.spec_reviewed = true
@@ -564,7 +546,7 @@ With:
 
 ```bash
   if [ "$PLAN_WRITE_RECORDED" = "true" ] && ! state_is_true '.planning.plan_reviewed'; then
-    block_posttool "Plan 已写入，请先完成 plan review 并让用户批准后再进入 worktree 阶段。"
+    block_posttool "Plan 已写入，请先完成 plan review，再进入 worktree 阶段。"
   fi
 
   if state_is_true '.planning.plan_reviewed' && ! state_is_true '.worktree.created'; then
@@ -574,7 +556,7 @@ With:
 
 - [ ] **Step 5: Verify `plan_reviewed` in fresh state (init-state.sh)**
 
-`scripts/init-state.sh` has no `normalize_planning_state()` healing path for v2 states. Fresh states get `plan_reviewed: false` from the template (Step 2). For existing v2 states that predate this field, all gate scripts use `state_is_true '.planning.plan_reviewed'` which evaluates `null == true` as false, so the missing field safely defaults to `false`. No code change in `init-state.sh` is required.
+`scripts/init-state.sh` does not need new logic for this packet. Fresh states will get `plan_reviewed: false` **because Step 2 updates the template** that `init-state.sh` already copies. For existing v2 states that predate this field, all gate scripts use `state_is_true '.planning.plan_reviewed'`, so the missing field safely behaves as `false` until migration or rewrite fills it in.
 
 Run a quick verification:
 ```bash
@@ -612,7 +594,7 @@ To:
 
 - [ ] **Step 7: Create `record-plan-state.sh`**
 
-Create `scripts/record-plan-state.sh` mirroring `scripts/record-spec-state.sh`:
+Create `scripts/record-plan-state.sh` as an explicit repo-local write entry for `planning.plan_reviewed`, mirroring the existing `record-spec-state.sh` pattern:
 
 ```bash
 #!/bin/bash
@@ -667,22 +649,82 @@ git commit -m "feat(p4): add plan review gate with record-plan-state.sh"
 
 ## Packet 6: P5 — Midstream activation phase recovery
 
-**User-facing goal:** When `enable enforcer` is issued mid-workstream, the enforcer recovers the correct `current_phase` from structured state fields and canonical artifacts, rather than staying at `init`.
+**User-facing goal:** When `enable enforcer` is issued mid-workstream, the enforcer recovers the correct `current_phase` conservatively, without clearing the existing resume gate or drifting away from the repo's canonical path semantics.
 
 **Owned files:**
-- Modify: `scripts/sync-user-prompt-state.sh` (add `recover_phase_from_state` function and integrate into activation handler)
-- Modify: `tests/test_bypass_state.sh` (P5 recovery tests, appended after existing enable/disable enforcer tests at line ~842)
+- Modify: `scripts/sync-user-prompt-state.sh` (add conservative phase recovery and integrate into activation handler)
+- Modify: `scripts/lib/workflow_paths.sh` only if a helper is needed to reuse canonical artifact semantics without duplicating subtree / exclusion logic
+- Modify: `tests/test_bypass_state.sh` (state-based recovery + resume-gate preservation tests)
+- Modify: `tests/test_workflow_activation.sh` (artifact fallback tests using existing subtree / alias path surface)
+- Verify: `tests/test_resume_recovery_flow.sh` (resume contract remains intact)
 
 **Parallel safety:** Safe to run in parallel with Packet 1, Packet 2, and Packet 3. Shares no files with other packets.
 
-**Default verification:** `bash tests/test_bypass_state.sh`
+**Default verification:** `bash tests/test_bypass_state.sh && bash tests/test_workflow_activation.sh && bash tests/test_resume_recovery_flow.sh`
 
 - [ ] **Step 1: Write failing tests (RED)**
 
-Append to `tests/test_bypass_state.sh` after the existing enable/disable enforcer test block (after line ~842). The test uses the same pattern as the existing `MANUAL_PROMPT_PROJECT` and `STATE_FILE` variables already defined in that file:
+Append to `tests/test_bypass_state.sh` after the existing enable/disable enforcer test block. The test uses the same `MANUAL_PROMPT_PROJECT` and `STATE_FILE` variables already defined in that file:
 
 ```bash
 # P5: Midstream activation phase recovery tests
+
+# Test: existing non-init phase is preserved
+write_v2_state "$STATE_FILE"
+jq '.current_phase = "review"' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_REVIEW_PHASE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_REVIEW_PHASE_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer preserve-phase path to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"review"'
+assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
+
+# Test: debugging.active=true recovers to "debugging"
+write_v2_state "$STATE_FILE"
+jq '.debugging.active = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_DEBUG_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_DEBUG_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer debugging recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"debugging"'
+
+# Test: worktree.created=true with baseline false recovers to "worktree"
+write_v2_state "$STATE_FILE"
+jq '.worktree.created = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_WORKTREE_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_WORKTREE_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer worktree recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"worktree"'
+
+# Test: baseline verified recovers to "tdd"
+write_v2_state "$STATE_FILE"
+jq '.worktree.created = true | .worktree.baseline_verified = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+mv "$STATE_FILE.tmp" "$STATE_FILE"
+P5_TDD_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+if [ -n "$P5_TDD_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer tdd recovery to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"tdd"'
 
 # Test: planning.plan_written=true recovers to "planning"
 write_v2_state "$STATE_FILE"
@@ -693,12 +735,10 @@ P5_PLANNING_OUTPUT="$(
     | bash scripts/sync-user-prompt-state.sh
 )"
 if [ -n "$P5_PLANNING_OUTPUT" ]; then
-  echo "P5: Expected enable enforcer to be silent allow" >&2
+  echo "P5: Expected enable enforcer planning recovery to be silent allow" >&2
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
-assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
-assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
 
 # Test: brainstorming.spec_written=true recovers to "brainstorming"
 write_v2_state "$STATE_FILE"
@@ -713,34 +753,6 @@ if [ -n "$P5_BRAINSTORM_OUTPUT" ]; then
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
-
-# Test: worktree.created=true recovers to "tdd"
-write_v2_state "$STATE_FILE"
-jq '.worktree.created = true' "$STATE_FILE" > "$STATE_FILE.tmp"
-mv "$STATE_FILE.tmp" "$STATE_FILE"
-P5_TDD_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$P5_TDD_OUTPUT" ]; then
-  echo "P5: Expected enable enforcer tdd recovery to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.current_phase' '"tdd"'
-
-# Test: review.tasks non-empty recovers to "review"
-write_v2_state "$STATE_FILE"
-jq '.review.tasks = {"task-001": {"spec_review_passed": true}}' "$STATE_FILE" > "$STATE_FILE.tmp"
-mv "$STATE_FILE.tmp" "$STATE_FILE"
-P5_REVIEW_OUTPUT="$(
-  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
-    | bash scripts/sync-user-prompt-state.sh
-)"
-if [ -n "$P5_REVIEW_OUTPUT" ]; then
-  echo "P5: Expected enable enforcer review recovery to be silent allow" >&2
-  exit 1
-fi
-assert_json_equals "$STATE_FILE" '.current_phase' '"review"'
 
 # Test: finishing.invoked=true recovers to "finishing"
 write_v2_state "$STATE_FILE"
@@ -768,7 +780,7 @@ if [ -n "$P5_INIT_OUTPUT" ]; then
 fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
 
-# Test: enable enforcer clears resume.recovery_required
+# Test: enable enforcer must NOT clear resume.recovery_required
 write_v2_state "$STATE_FILE"
 jq '.planning.plan_written = true | .resume.recovery_required = true' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
@@ -781,11 +793,11 @@ if [ -n "$P5_RESUME_OUTPUT" ]; then
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
-assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'false'
+assert_json_equals "$STATE_FILE" '.resume.recovery_required' 'true'
 
-# Regression: disable enforcer does not run recovery
+# Regression: disable enforcer does not change current_phase
 write_v2_state "$STATE_FILE"
-jq '.planning.plan_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
+jq '.current_phase = "planning" | .planning.plan_written = true' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
 P5_DISABLE_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"disable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
@@ -796,30 +808,64 @@ if [ -n "$P5_DISABLE_OUTPUT" ]; then
   exit 1
 fi
 assert_json_equals "$STATE_FILE" '.workflow.active' 'false'
-assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
 ```
 
-Note: The artifact fallback test requires a different project directory with actual spec/plan files. This test should be appended to `tests/test_workflow_activation.sh` instead, since that file already creates spec/plan directories. For the primary test surface, `tests/test_bypass_state.sh` covers the state-field recovery path.
+Append artifact fallback tests to `tests/test_workflow_activation.sh`, because that file already exercises supported root / subtree / alias / cwd-derived canonical write semantics. Add a block that:
+
+1. Seeds a state file with `current_phase = "init"` and no structured phase fields.
+2. Creates a supported subtree or alias canonical plan artifact.
+3. Sends `enable enforcer` through `scripts/sync-user-prompt-state.sh`.
+4. Verifies recovery lands in `planning`.
+5. Repeats the pattern for a canonical spec artifact and verifies `brainstorming`.
+
+Do not use a root-only `project_dir/docs/superpowers/...` check as the only test surface.
 
 Run: `bash tests/test_bypass_state.sh`
 Expected: FAIL at P5 recovery assertions (sync-user-prompt-state.sh not yet updated).
 
-- [ ] **Step 2: Add `recover_phase_from_state` function**
+- [ ] **Step 2: Add `recover_phase_from_state` and canonical-artifact helper**
 
 In `scripts/sync-user-prompt-state.sh`, before `is_manual_activate_exact_command()`, add:
 
 ```bash
+project_contains_canonical_artifact() {
+  local project_dir="$1"
+  local want_kind="$2"
+  local file rel kind
+
+  while IFS= read -r -d '' file; do
+    rel="$(workflow_paths_normalize_project_relative_path "$file" "$project_dir" "$project_dir")"
+    kind="$(workflow_paths_classify_canonical_write "$rel")"
+    if [ "$kind" = "$want_kind" ]; then
+      return 0
+    fi
+  done < <(find "$project_dir" -type f \( -path '*/docs/superpowers/specs/*.md' -o -path '*/docs/superpowers/plans/*.md' \) -print0)
+
+  return 1
+}
+
 recover_phase_from_state() {
   local state_file="$1"
+  local project_dir="$2"
+  local current_phase
 
-  # State-first recovery: check structured fields in priority order
+  current_phase="$(jq -r '.current_phase // "init"' "$state_file" 2>/dev/null || echo init)"
+  case "$current_phase" in
+    brainstorming|planning|worktree|tdd|review|debugging|finishing)
+      echo "$current_phase"; return 0 ;;
+  esac
+
   if jq -e '.finishing.invoked == true' "$state_file" >/dev/null 2>&1; then
     echo "finishing"; return 0
   fi
-  if jq -e '.review.tasks | length > 0' "$state_file" >/dev/null 2>&1; then
-    echo "review"; return 0
+  if jq -e '.debugging.active == true' "$state_file" >/dev/null 2>&1; then
+    echo "debugging"; return 0
   fi
-  if jq -e '.tdd.current_task != null or .worktree.created == true' "$state_file" >/dev/null 2>&1; then
+  if jq -e '.worktree.created == true and (.worktree.baseline_verified // false) != true' "$state_file" >/dev/null 2>&1; then
+    echo "worktree"; return 0
+  fi
+  if jq -e '.tdd.current_task != null or (.worktree.baseline_verified // false) == true' "$state_file" >/dev/null 2>&1; then
     echo "tdd"; return 0
   fi
   if jq -e '.planning.plan_written == true' "$state_file" >/dev/null 2>&1; then
@@ -829,12 +875,10 @@ recover_phase_from_state() {
     echo "brainstorming"; return 0
   fi
 
-  # Artifact fallback: check canonical file existence
-  local project_dir="${CLAUDE_PROJECT_DIR:-.}"
-  if compgen -G "$project_dir/docs/superpowers/plans/*.md" >/dev/null 2>&1; then
+  if project_contains_canonical_artifact "$project_dir" "plan"; then
     echo "planning"; return 0
   fi
-  if compgen -G "$project_dir/docs/superpowers/specs/*.md" >/dev/null 2>&1; then
+  if project_contains_canonical_artifact "$project_dir" "spec"; then
     echo "brainstorming"; return 0
   fi
 
@@ -842,13 +886,15 @@ recover_phase_from_state() {
 }
 ```
 
-- [ ] **Step 3: Integrate recovery into activation handler**
+Source `scripts/lib/workflow_paths.sh` if needed so the fallback uses the same subtree / alias / exclusion semantics as the rest of the plugin.
+
+- [ ] **Step 3: Integrate recovery into activation handler without clearing resume gate**
 
 Replace the activation handler block (lines 228-242):
 
 ```bash
 if is_manual_activate_exact_command "$PROMPT_LC"; then
-  RECOVERED_PHASE="$(recover_phase_from_state "$STATE_FILE")"
+  RECOVERED_PHASE="$(recover_phase_from_state "$STATE_FILE" "$PROJECT_DIR")"
   jq --arg now "$NOW_UTC" --arg phase "$RECOVERED_PHASE" '
     .workflow.active = true
     | .workflow.override = "manual_on"
@@ -860,24 +906,29 @@ if is_manual_activate_exact_command "$PROMPT_LC"; then
     | .interrupt.reason = null
     | .interrupt.keywords_detected = []
     | .current_phase = $phase
-    | .resume.recovery_required = false
   ' "$STATE_FILE" > "$tmp_file"
   mv "$tmp_file" "$STATE_FILE"
   exit 0
 fi
 ```
 
-The `resume.recovery_required = false` clearance is critical: without it, `check-pretool-gates.sh` would still block Edit/Write/Agent with the resume gate even after phase recovery succeeds.
+Do **not** clear `.resume.recovery_required` here. Manual enable should recover phase-aware state, but the dedicated `/superpowers-flow-enforcer:resume-enforcer` flow remains the only supported way to clear the resume gate.
 
 - [ ] **Step 4: Verify tests pass (GREEN)**
 
 Run: `bash tests/test_bypass_state.sh`
 Expected: PASS.
 
+Run: `bash tests/test_workflow_activation.sh`
+Expected: PASS, including new subtree / alias artifact fallback cases.
+
+Run: `bash tests/test_resume_recovery_flow.sh`
+Expected: PASS (resume contract unchanged).
+
 - [ ] **Step 5: Commit**
 
 ```bash
-git add scripts/sync-user-prompt-state.sh tests/test_bypass_state.sh
+git add scripts/sync-user-prompt-state.sh scripts/lib/workflow_paths.sh tests/test_bypass_state.sh tests/test_workflow_activation.sh
 git commit -m "feat(p5): midstream activation phase recovery on enable enforcer"
 ```
 
@@ -888,7 +939,10 @@ git commit -m "feat(p5): midstream activation phase recovery on enable enforcer"
 **User-facing goal:** All six fixes work together without regressions, and active planning files and user-facing docs reflect completion.
 
 **Owned files:**
-- Modify: `task_plan.md`, `progress.md`
+- Modify: `README.md`
+- Modify: `README_cn.md`
+- Modify: `CLAUDE.md`
+- Modify: `task_plan.md`, `progress.md`, `findings.md`
 
 **Parallel safety:** Must run after all prior packets.
 
@@ -926,7 +980,7 @@ Expected: All PASS.
 
 Update `CLAUDE.md` and `README.md` / `README_cn.md`:
 
-1. Add `code-quality-reviewer` alias. In `CLAUDE.md` Packetized Subagent Execution section, change:
+1. Add `code-quality-reviewer` compatibility alias. In `CLAUDE.md` Packetized Subagent Execution section, change:
 ```markdown
 - Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer`.
 ```
@@ -935,19 +989,27 @@ To:
 - Code quality review packets must use `SPFE_PACKET_ROLE=code-reviewer` or `SPFE_PACKET_ROLE=code-quality-reviewer` (both are accepted; the latter is normalized to the former internally).
 ```
 
-2. Add `planning.plan_reviewed` gate description. In `CLAUDE.md` Brainstorming / Planning section, add:
+2. Replace the old P1 `--norc` claim with the official hook-runtime guidance. Add wording that:
 ```markdown
-- **Planning Phase**: After activation, plan writing sets `plan_reviewed = false`. The plan must pass review before worktree creation is allowed. Use `record-plan-state.sh plan-reviewed pass` to mark review completion.
+- Claude Code sources the user's shell profile before running the hook command.
+- Unconditional `echo` in `~/.zshrc` / `~/.bashrc` can break hook JSON.
+- Guard that output so it only runs in interactive shells.
 ```
 
-3. Add midstream activation behavior. In `CLAUDE.md` Workflow Entry section, add:
+3. Add `planning.plan_reviewed` as a repo-local planning hold. In `CLAUDE.md` Brainstorming / Planning section, add:
+```markdown
+- **Planning Phase**: In this repo's local enforcer flow, plan writing sets `plan_reviewed = false`. The plan must pass local plan review before the existing worktree gate resumes. Use `record-plan-state.sh plan-reviewed pass` to mark review completion.
+```
+
+4. Add midstream activation behavior without changing the resume contract. In `CLAUDE.md` Workflow Entry / Resume section, add:
 ```markdown
 - **Midstream Activation**: When `enable enforcer` is issued mid-workstream, the enforcer recovers `current_phase` from structured state fields and canonical artifacts. Phase is not inferred from natural language.
+- **Resume Gate**: Manual enable does not clear `resume.recovery_required`; resumed unfinished workflows still require `/superpowers-flow-enforcer:resume-enforcer`.
 ```
 
 Search for existing mentions to avoid duplicates:
 ```bash
-grep -n 'code-reviewer\|plan_reviewed\|midstream\|plan-reviewed' CLAUDE.md README.md README_cn.md 2>/dev/null || true
+grep -n 'code-reviewer\|plan_reviewed\|midstream\|plan-reviewed\|interactive\|profile\|~/.zshrc\|~/.bashrc\|resume.recovery_required' CLAUDE.md README.md README_cn.md 2>/dev/null || true
 ```
 
 - [ ] **Step 4: Update active tracking files**
@@ -958,18 +1020,18 @@ Update `task_plan.md` phase 8 checklist to include P0–P5:
 ### 阶段 8：TDD 实施
 - [x] RED: 编写测试用例
   - [x] P0: code-quality-reviewer 角色测试
-  - [x] P1: --norc 隔离测试
+  - [x] P1: shell profile pollution 文档 / 契约修正
   - [x] P2: Stop hook phase guard 测试
   - [x] P3: State file corruption guard 测试
   - [x] P4: Planning review gate 测试
   - [x] P5: Midstream activation phase recovery 测试
 - [x] GREEN: 实施最小代码改动
   - [x] P0: 修改 task_flow_packets.sh、check-pretool-gates.sh、sync-post-tool-state.sh
-  - [x] P1: 修改 hooks.json
+  - [x] P1: 修改 README.md、README_cn.md、CLAUDE.md（不改 hooks.json）
   - [x] P2: 修改 check-stop-review-gate.sh
   - [x] P3: 修改 init-state.sh、update-state.sh
   - [x] P4: 修改 flow_state.json.tmpl、sync-post-tool-state.sh、migrate-state.sh、record-plan-state.sh
-  - [x] P5: 修改 sync-user-prompt-state.sh
+  - [x] P5: 修改 sync-user-prompt-state.sh、tests/test_workflow_activation.sh（必要时加 workflow_paths helper）
 - [x] REFACTOR: 清理代码
 - [x] 验证所有测试通过
 ```
@@ -987,17 +1049,23 @@ Append to `progress.md`:
 
 ### 关键变更
 1. P0: `scripts/lib/task_flow_packets.sh`, `check-pretool-gates.sh`, `sync-post-tool-state.sh` — code-quality-reviewer 别名
-2. P1: `hooks/hooks.json` — 全部 10 个 command 注入 `bash --norc`
+2. P1: `README.md`, `README_cn.md`, `CLAUDE.md` — 明确 shell profile pollution 是 Claude Code hook runtime 限制，并同步官方 mitigation
 3. P2: `scripts/check-stop-review-gate.sh` — current_phase 读取 + 双检查 phase guard
 4. P3: `scripts/init-state.sh`, `scripts/update-state.sh` — `jq -e 'type == "object"'` 硬校验
-5. P4: `templates/flow_state.json.tmpl`, `scripts/sync-post-tool-state.sh`, `scripts/migrate-state.sh` — planning 阶段两阶段门控 (plan review → worktree)
+5. P4: `templates/flow_state.json.tmpl`, `scripts/sync-post-tool-state.sh`, `scripts/migrate-state.sh` — repo-local planning hold (`plan_reviewed`) → existing worktree gate
+6. P5: `scripts/sync-user-prompt-state.sh`（以及必要时 `scripts/lib/workflow_paths.sh`）— 恢复 `current_phase`，但不清除 resume gate
 ```
+
+Append a `Codex`-labeled summary to `findings.md` describing the final contract decisions for:
+- P1 as a documented Claude Code runtime limitation
+- P4 as a repo-local planning hold
+- P5 as resume-safe phase recovery that does not clear `resume.recovery_required`
 
 - [ ] **Step 5: Final commit**
 
 ```bash
-git add task_plan.md progress.md CLAUDE.md README.md README_cn.md
-git commit -m "docs: mark P0-P4 implementation complete"
+git add task_plan.md progress.md findings.md CLAUDE.md README.md README_cn.md
+git commit -m "docs: mark P0-P5 implementation complete"
 ```
 
 ---
@@ -1005,12 +1073,12 @@ git commit -m "docs: mark P0-P4 implementation complete"
 ## Self-Review
 
 **1. Spec coverage:**
-- Goal 1 (code-quality-reviewer): Packet 1 covers validation, pretool gate, and state normalization. ✅
-- Goal 2 (--norc): Packet 2 covers behavioral rcfile test and hooks.json injection. ✅
+- Goal 1 (code-quality-reviewer alias): Packet 1 covers validation, pretool gate, and state normalization. ✅
+- Goal 2 (P1 scope correction): Packet 2 removes the unsupported `--norc` remediation and syncs active docs to the official mitigation. ✅
 - Goal 3 (phase guard): Packet 3 covers tests and implementation. ✅
 - Goal 4 (corruption guard): Packet 4 covers init-state.sh and update-state.sh hardening. ✅
-- Goal 5 (planning review gate): Packet 5 covers state schema, posttool gate split, template, init, migration, `record-plan-state.sh`, and tests. ✅
-- Goal 6 (midstream activation): Packet 6 covers `recover_phase_from_state`, activation handler integration, and 8 recovery tests. ✅
+- Goal 5 (repo-local planning hold): Packet 5 covers state schema, posttool gate split, template, init, migration, `record-plan-state.sh`, and tests. ✅
+- Goal 6 (midstream activation): Packet 6 covers resume-safe `recover_phase_from_state`, activation handler integration, and state/artifact fallback tests. ✅
 - Completion claim verification untouched (runs in all phases) — verified in P2 regression test. ✅
 
 **2. Placeholder scan:**
@@ -1022,9 +1090,9 @@ git commit -m "docs: mark P0-P4 implementation complete"
 - `packet_role` normalization uses consistent string comparison. ✅
 - Phase names match state schema. ✅
 - `jq -e 'type == "object"'` used consistently in P3. ✅
-- `planning.plan_reviewed` is boolean, defaults `false`, and follows the same naming pattern as `brainstorming.spec_reviewed`. ✅
+- `planning.plan_reviewed` is boolean, defaults `false`, and is explicitly described as a repo-local enforcer field. ✅
 
 **4. AGENTS.md packet discipline:**
 - Each packet has one primary objective, one main surface area, one verification path. ✅
 - Serial/parallel relationships declared. ✅
-- No two packets share a primary production file (except Packet 1→2 test file dependency). ✅
+- No two packets share a primary production file; Packet 7 is the only intentional docs/tracking consolidation packet. ✅
