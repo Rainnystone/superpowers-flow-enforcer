@@ -31,6 +31,13 @@ write_tmp_and_swap() {
   local tmp_file
   tmp_file="${STATE_FILE}.tmp"
   jq "$expr" "$STATE_FILE" > "$tmp_file"
+
+  if ! jq -e 'type == "object"' "$tmp_file" >/dev/null 2>&1; then
+    echo '{"error":"State mutation produced non-object JSON; aborting to prevent corruption"}'
+    rm -f "$tmp_file"
+    exit 1
+  fi
+
   mv "$tmp_file" "$STATE_FILE"
 }
 
