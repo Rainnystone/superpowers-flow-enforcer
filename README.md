@@ -267,6 +267,16 @@ The plugin references these superpowers skills:
 
 **`shasum: command not found` on SessionStart (Windows)**: The `init-state.sh` script uses a cross-platform hash fallback (`sha256sum` first, then `shasum -a 256`). If both are missing, ensure your Git Bash / shell environment includes GNU coreutils (`sha256sum`). This should not happen on standard Git Bash for Windows installations.
 
+**Hook JSON validation failed / unexpected output before JSON**: Claude Code sources the user's shell profile (`~/.zshrc`, `~/.bashrc`, etc.) before the configured hook command runs. Unconditional `echo` or `printf` statements in those profile files can prepend noise before hook JSON output, causing parse failures. This is a documented Claude Code hook runtime behavior, not something this plugin can fix by changing its `hooks.json` command strings. The supported mitigation is to guard profile output so it only runs in interactive shells:
+
+```bash
+if [[ $- == *i* ]]; then
+  echo "Shell ready"
+fi
+```
+
+This repo does **not** claim that changing `hooks/hooks.json` to `bash --norc ...` fixes that outer-shell profile-sourcing behavior.
+
 ## License
 
 MIT

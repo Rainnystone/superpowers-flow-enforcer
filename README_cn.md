@@ -268,6 +268,16 @@ vendor/
 
 **SessionStart 报 `shasum: command not found`（Windows）**: `init-state.sh` 已使用跨平台 hash fallback（优先 `sha256sum`，回退 `shasum -a 256`）。如果两者都找不到，请确认你的 Git Bash / shell 环境包含 GNU coreutils（`sha256sum`）。标准的 Git Bash for Windows 安装应该自带。
 
+**Hook JSON 解析失败 / JSON 前出现意外输出**: Claude Code 在执行配置的 hook 命令之前，会先加载用户的 shell profile（`~/.zshrc`、`~/.bashrc` 等）。如果 profile 里有不带条件的 `echo` 或 `printf` 语句，这些输出会出现在 hook JSON 之前，导致解析失败。这是 Claude Code hook runtime 的既有行为，不是这个插件通过修改 `hooks.json` 命令字符串能解决的。官方建议的 mitigation 是把 profile 里的输出限制在交互式 shell 中：
+
+```bash
+if [[ $- == *i* ]]; then
+  echo "Shell ready"
+fi
+```
+
+本仓库 **不** 声称将 `hooks/hooks.json` 改为 `bash --norc ...` 能修复 Claude Code 外层 shell 加载 profile 的行为。
+
 ## 许可证
 
 MIT

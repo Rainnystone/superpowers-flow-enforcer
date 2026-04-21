@@ -16,6 +16,7 @@ The plugin uses Claude Code hooks to enforce workflow only after explicit workfl
 - **Review Phase**: Task completion requires two-stage review (spec + code quality), and packetized Agent dispatch cannot start the next task's implementer before the current open task has passed both review stages.
 - **Verification / Stop**: Completion claims still need fresh verification evidence from the current `last_assistant_message`. The Stop hook is command-only, and state-based stop gates fail open when state is missing, unreadable, or workflow is inactive.
 - **Debugging Phase**: Failed test commands still trigger debugging-state sync.
+- **Shell Profile Pollution**: Claude Code sources the user's shell profile (`~/.zshrc`, `~/.bashrc`, etc.) before the configured hook command runs. Unconditional `echo` or `printf` statements in those profile files can prepend noise before hook JSON output, causing parse failures. This is a documented hook runtime limitation, not something this plugin can fix by changing its `hooks.json` command strings. The supported mitigation is to guard profile output so it only runs in interactive shells, for example: `if [[ $- == *i* ]]; then echo "Shell ready"; fi`. This repo does **not** claim that changing `hooks/hooks.json` to `bash --norc ...` fixes that outer-shell profile-sourcing behavior.
 
 ## Bypass Mechanism
 
