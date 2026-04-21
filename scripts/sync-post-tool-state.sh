@@ -90,6 +90,10 @@ record_successful_agent_dispatch() {
   packet_task_id="$(printf '%s' "$packet_metadata" | jq -r '.task_id // ""')"
   packet_role="$(printf '%s' "$packet_metadata" | jq -r '.role // ""')"
 
+  if [ "$packet_role" = "code-quality-reviewer" ]; then
+    packet_role="code-reviewer"
+  fi
+
   if [ -z "$packet_task_id" ] || [ -z "$packet_role" ]; then
     return
   fi

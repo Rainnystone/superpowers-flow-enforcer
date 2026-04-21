@@ -169,7 +169,7 @@ task_boundary_agent_gate_active() {
 is_supported_packet_role() {
   local packet_role="$1"
   case "$packet_role" in
-    implementer|spec-reviewer|code-reviewer)
+    implementer|spec-reviewer|code-reviewer|code-quality-reviewer)
       return 0
       ;;
   esac
@@ -340,6 +340,11 @@ if [ "$TOOL_NAME" = "Agent" ]; then
 
   packet_task_id="$(printf '%s' "$packet_metadata" | jq -r '.task_id // ""')"
   packet_role="$(printf '%s' "$packet_metadata" | jq -r '.role // ""')"
+
+  if [ "$packet_role" = "code-quality-reviewer" ]; then
+    packet_role="code-reviewer"
+  fi
+
   active_task_id="$(state_active_task_id)"
 
   if [ -z "$active_task_id" ]; then

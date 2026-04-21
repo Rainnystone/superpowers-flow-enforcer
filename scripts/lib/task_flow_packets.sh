@@ -50,7 +50,7 @@ role = role_line[len(role_prefix):]
 if not task_id or not role:
     raise SystemExit(1)
 
-if role not in {"implementer", "spec-reviewer", "code-reviewer"}:
+if role not in {"implementer", "spec-reviewer", "code-reviewer", "code-quality-reviewer"}:
     raise SystemExit(1)
 
 print(json.dumps({"task_id": task_id, "role": role}, separators=(",", ":")))
@@ -197,7 +197,7 @@ if not task_id_from_description or not role:
 if task_id_from_description != task_id:
     raise SystemExit(1)
 
-if role not in {"implementer", "spec-reviewer", "code-reviewer"}:
+if role not in {"implementer", "spec-reviewer", "code-reviewer", "code-quality-reviewer"}:
     raise SystemExit(1)
 
 print(json.dumps({"task_id": task_id_from_description, "role": role}, separators=(",", ":")))
@@ -253,7 +253,7 @@ role = role_line[len(role_prefix):]
 if not task_id or not role:
     raise SystemExit(1)
 
-if role not in {"implementer", "spec-reviewer", "code-reviewer"}:
+if role not in {"implementer", "spec-reviewer", "code-reviewer", "code-quality-reviewer"}:
     raise SystemExit(1)
 
 print(json.dumps({"task_id": task_id, "role": role}, separators=(",", ":")))

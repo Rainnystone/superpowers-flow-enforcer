@@ -4,7 +4,11 @@ set -euo pipefail
 assert_json_equals() {
   local file="$1" jq_expr="$2" expected="$3"
   local actual
-  actual="$(jq -c "$jq_expr" "$file")"
+  if [[ "$file" == /dev/fd/* || "$file" == /proc/* ]]; then
+    actual="$(cat "$file" | jq -c "$jq_expr")"
+  else
+    actual="$(jq -c "$jq_expr" "$file")"
+  fi
   [ "$actual" = "$expected" ] || {
     echo "Expected $jq_expr = $expected, got $actual" >&2
     exit 1
