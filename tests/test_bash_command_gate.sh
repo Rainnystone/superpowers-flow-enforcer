@@ -58,9 +58,9 @@ assert_deny() {
     exit 1
   }
 
-  assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.hookEventName' '"PreToolUse"'
-  assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.permissionDecision' '"deny"'
-  jq -e --arg frag "$reason_fragment" '.hookSpecificOutput.permissionDecisionReason | contains($frag)' <(printf '%s' "$output") >/dev/null 2>&1 || {
+  assert_json_text_equals "$output" '.hookSpecificOutput.hookEventName' '"PreToolUse"'
+  assert_json_text_equals "$output" '.hookSpecificOutput.permissionDecision' '"deny"'
+  assert_json_text_equals "$output" '.hookSpecificOutput.permissionDecisionReason | contains($frag)' 'true' --arg frag "$reason_fragment" || {
     echo "Expected deny reason to contain: $reason_fragment" >&2
     exit 1
   }

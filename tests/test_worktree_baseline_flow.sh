@@ -6,6 +6,8 @@ source tests/helpers/state-fixtures.sh
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+WORKTREE_CREATED_PATH_1="$TMP_DIR/wt-1"
+WORKTREE_CREATED_PATH_2="$TMP_DIR/wt-2"
 
 export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 export CLAUDE_PLUGIN_ROOT="$(pwd)"
@@ -13,17 +15,17 @@ export CLAUDE_PLUGIN_ROOT="$(pwd)"
 mkdir -p "$CLAUDE_PROJECT_DIR/.claude"
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 
-bash scripts/record-worktree-state.sh created /tmp/wt-1
+bash scripts/record-worktree-state.sh created "$WORKTREE_CREATED_PATH_1"
 bash scripts/record-worktree-state.sh baseline pass
 
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.created' 'true'
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' '"/tmp/wt-1"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' "\"$WORKTREE_CREATED_PATH_1\""
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'true'
 
-bash scripts/record-worktree-state.sh created /tmp/wt-2
+bash scripts/record-worktree-state.sh created "$WORKTREE_CREATED_PATH_2"
 
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.created' 'true'
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' '"/tmp/wt-2"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' "\"$WORKTREE_CREATED_PATH_2\""
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'false'
 
 bash scripts/record-worktree-state.sh baseline pass
@@ -35,7 +37,7 @@ cat <<'EOF' | bash scripts/sync-post-tool-state.sh >/dev/null
 EOF
 
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.created' 'true'
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' '"/tmp/wt-2"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' "\"$WORKTREE_CREATED_PATH_2\""
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'true'
 
 cat <<'EOF' | bash scripts/sync-post-tool-state.sh >/dev/null
@@ -64,7 +66,7 @@ cat <<EOF | bash scripts/sync-post-tool-state.sh >"$TMP_DIR/worktree-chain-outpu
 {"tool_name":"Bash","tool_input":{"command":"cd repo && git worktree add .worktrees/chained HEAD"},"tool_result":"Preparing worktree (new branch 'chained')"}
 EOF
 
-assert_json_equals <(printf '%s' "$(cat "$TMP_DIR/worktree-chain-output.json")") '.decision' '"block"'
+assert_json_text_equals "$(cat "$TMP_DIR/worktree-chain-output.json")" '.decision' '"block"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.created' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' '".worktrees/chained"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'false'
@@ -75,7 +77,7 @@ cat <<EOF | bash scripts/sync-post-tool-state.sh >"$TMP_DIR/worktree-shell-chain
 {"tool_name":"Bash","tool_input":{"command":"bash -lc \"cd repo && git worktree add .worktrees/shell-chain HEAD\""},"tool_result":"Preparing worktree (new branch 'shell-chain')"}
 EOF
 
-assert_json_equals <(printf '%s' "$(cat "$TMP_DIR/worktree-shell-chain-output.json")") '.decision' '"block"'
+assert_json_text_equals "$(cat "$TMP_DIR/worktree-shell-chain-output.json")" '.decision' '"block"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.created' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' '".worktrees/shell-chain"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'false'
@@ -86,7 +88,7 @@ cat <<EOF | bash scripts/sync-post-tool-state.sh >"$TMP_DIR/worktree-git-c-outpu
 {"tool_name":"Bash","tool_input":{"command":"git -C repo worktree add .worktrees/git-c HEAD"},"tool_result":"Preparing worktree (new branch 'git-c')"}
 EOF
 
-assert_json_equals <(printf '%s' "$(cat "$TMP_DIR/worktree-git-c-output.json")") '.decision' '"block"'
+assert_json_text_equals "$(cat "$TMP_DIR/worktree-git-c-output.json")" '.decision' '"block"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.created' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.path' '".worktrees/git-c"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.worktree.baseline_verified' 'false'
@@ -159,9 +161,9 @@ worktree_deny_output="$(
   echo 'Expected command gate to deny production writes before worktree baseline verification' >&2
   exit 1
 }
-assert_json_equals <(printf '%s' "$worktree_deny_output") '.hookSpecificOutput.permissionDecision' '"deny"'
-assert_json_equals <(printf '%s' "$worktree_deny_output") '.hookSpecificOutput.permissionDecisionReason | contains("worktree.created")' 'true'
-assert_json_equals <(printf '%s' "$worktree_deny_output") '.hookSpecificOutput.permissionDecisionReason | contains("worktree.baseline_verified")' 'true'
+assert_json_text_equals "$worktree_deny_output" '.hookSpecificOutput.permissionDecision' '"deny"'
+assert_json_text_equals "$worktree_deny_output" '.hookSpecificOutput.permissionDecisionReason | contains("worktree.created")' 'true'
+assert_json_text_equals "$worktree_deny_output" '.hookSpecificOutput.permissionDecisionReason | contains("worktree.baseline_verified")' 'true'
 
 jq '
   .worktree.created = true

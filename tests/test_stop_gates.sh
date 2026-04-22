@@ -18,9 +18,9 @@ assert_stop_block() {
     exit 1
   }
 
-  assert_json_equals <(printf '%s' "$output") '.decision' '"block"'
-  assert_json_equals <(printf '%s' "$output") '. | keys | sort' '["decision","reason"]'
-  printf '%s' "$output" | jq -e --arg frag "$reason_fragment" '.reason | contains($frag)' >/dev/null 2>&1 || {
+  assert_json_text_equals "$output" '.decision' '"block"'
+  assert_json_text_equals "$output" '. | keys | sort' '["decision","reason"]'
+  assert_json_text_equals "$output" '.reason | contains($frag)' 'true' --arg frag "$reason_fragment" || {
     echo "Expected Stop block reason to contain: $reason_fragment" >&2
     exit 1
   }

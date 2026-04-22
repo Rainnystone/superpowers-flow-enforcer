@@ -1,65 +1,83 @@
 #!/bin/bash
 
-workflow_paths_resolve_state_root_from_candidate() {
-  local candidate="${1:-}"
+WORKFLOW_PATHS_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=platform_compat.sh
+source "$WORKFLOW_PATHS_LIB_DIR/platform_compat.sh"
 
-  if [ -z "$candidate" ]; then
-    return
+workflow_paths__next_parent() {
+  local current="$1"
+  local parent=""
+
+  parent="$(dirname "$current")"
+  if [ "$parent" = "$current" ]; then
+    return 1
   fi
 
-  local current="$candidate"
-  if [ ! -d "$current" ]; then
-    current="$(dirname "$current")"
-  fi
+  printf '%s\n' "$parent"
+}
 
-  if [ ! -d "$current" ]; then
-    return
-  fi
-
-  current="$(cd "$current" 2>/dev/null && pwd -P)" || return
+workflow_paths__traverse_up_until_state_root() {
+  local current="$1"
+  local parent=""
 
   while :; do
     if [ -f "$current/.claude/flow_state.json" ]; then
       printf '%s\n' "$current"
-      return
+      return 0
     fi
 
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
+    parent="$(workflow_paths__next_parent "$current")" || return 1
+    current="$parent"
   done
+}
+
+workflow_paths_normalize_candidate_dir() {
+  local candidate="${1:-}"
+  local current=""
+
+  if [ -z "$candidate" ]; then
+    return 1
+  fi
+
+  current="$candidate"
+  if [ ! -d "$current" ]; then
+    current="$(dirname "$current")"
+  fi
+
+  if [ ! -d "$current" ]; then
+    return 1
+  fi
+
+  current="$(cd "$current" 2>/dev/null && pwd -P)" || return 1
+  printf '%s\n' "$current"
+}
+
+workflow_paths_resolve_state_root_from_candidate() {
+  local candidate="${1:-}"
+  local current=""
+
+  current="$(workflow_paths_normalize_candidate_dir "$candidate")" || return 1
+  workflow_paths__traverse_up_until_state_root "$current"
 }
 
 workflow_paths_resolve_state_root_alias_from_candidate() {
   local candidate="${1:-}"
+  local current=""
 
   if [ -z "$candidate" ]; then
-    return
+    return 1
   fi
 
-  local current="$candidate"
+  current="$candidate"
   if [ ! -d "$current" ]; then
     current="$(dirname "$current")"
   fi
 
   if [ ! -d "$current" ]; then
-    return
+    return 1
   fi
 
-  while :; do
-    if [ -f "$current/.claude/flow_state.json" ]; then
-      printf '%s\n' "$current"
-      return
-    fi
-
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
-  done
+  workflow_paths__traverse_up_until_state_root "$current"
 }
 
 workflow_paths_resolve_project_root() {
@@ -88,7 +106,7 @@ workflow_paths__strip_leading_dot_slash() {
 
 workflow_paths__normalize_relative_path() {
   local path="$1"
-  python3 - "$path" <<'PY'
+  platform_compat_run_python - "$path" <<'PY'
 import os
 import sys
 
@@ -107,7 +125,7 @@ workflow_paths__normalize_absolute_path() {
     return
   fi
 
-  python3 - "$path" <<'PY'
+  platform_compat_run_python - "$path" <<'PY'
 import os
 import sys
 

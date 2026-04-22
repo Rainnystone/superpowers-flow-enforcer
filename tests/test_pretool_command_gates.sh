@@ -2,6 +2,7 @@
 set -euo pipefail
 
 source tests/helpers/assert.sh
+source tests/helpers/platform.sh
 source tests/helpers/state-fixtures.sh
 
 TMP_DIR="$(mktemp -d)"
@@ -21,9 +22,9 @@ assert_pretool_deny() {
     echo "Expected PreToolUse command hook to deny, got empty output" >&2
     exit 1
   }
-  assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.hookEventName' '"PreToolUse"'
-  assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.permissionDecision' '"deny"'
-  jq -e --arg frag "$reason_fragment" '.hookSpecificOutput.permissionDecisionReason | contains($frag)' <(printf '%s' "$output") >/dev/null 2>&1 || {
+  assert_json_text_equals "$output" '.hookSpecificOutput.hookEventName' '"PreToolUse"'
+  assert_json_text_equals "$output" '.hookSpecificOutput.permissionDecision' '"deny"'
+  assert_json_text_equals "$output" '.hookSpecificOutput.permissionDecisionReason | contains($frag)' 'true' --arg frag "$reason_fragment" || {
     echo "Expected deny reason to contain: $reason_fragment" >&2
     exit 1
   }
@@ -349,34 +350,36 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 allow_output="$(run_write_gate "$CLAUDE_PROJECT_DIR/src/candidate.ts")"
 assert_pretool_allow "$allow_output"
 
-REAL_PROJECT="$TMP_DIR/real-project"
-ALIAS_PARENT="$TMP_DIR/alias-parent"
-ALIAS_PROJECT="$ALIAS_PARENT/project-link"
-mkdir -p "$REAL_PROJECT/.claude" "$REAL_PROJECT/nested/child" "$ALIAS_PARENT"
-ln -s "$REAL_PROJECT" "$ALIAS_PROJECT"
-write_v2_state "$REAL_PROJECT/.claude/flow_state.json"
-jq '
-  .workflow.active = true
-  | .brainstorming.spec_written = true
-  | .worktree.created = true
-  | .worktree.baseline_verified = true
-  | .tdd.pending_failure_record = false
-  | .tdd.tests_verified_fail = ["./src/candidate.test.ts"]
-' "$REAL_PROJECT/.claude/flow_state.json" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$REAL_PROJECT/.claude/flow_state.json"
+if platform_require_symlink_support_or_skip "$TMP_DIR"; then
+  REAL_PROJECT="$TMP_DIR/real-project"
+  ALIAS_PARENT="$TMP_DIR/alias-parent"
+  ALIAS_PROJECT="$ALIAS_PARENT/project-link"
+  mkdir -p "$REAL_PROJECT/.claude" "$REAL_PROJECT/nested/child" "$ALIAS_PARENT"
+  ln -s "$REAL_PROJECT" "$ALIAS_PROJECT"
+  write_v2_state "$REAL_PROJECT/.claude/flow_state.json"
+  jq '
+    .workflow.active = true
+    | .brainstorming.spec_written = true
+    | .worktree.created = true
+    | .worktree.baseline_verified = true
+    | .tdd.pending_failure_record = false
+    | .tdd.tests_verified_fail = ["./src/candidate.test.ts"]
+  ' "$REAL_PROJECT/.claude/flow_state.json" > "$TMP_DIR/state.json"
+  mv "$TMP_DIR/state.json" "$REAL_PROJECT/.claude/flow_state.json"
 
-allow_output="$(
-  (
-    export CLAUDE_PROJECT_DIR="$ALIAS_PROJECT/nested/child"
-    jq -n --arg cwd "$ALIAS_PROJECT/nested/child" --arg path "$ALIAS_PROJECT/src/candidate.ts" '{
-      hook_event_name:"PreToolUse",
-      cwd:$cwd,
-      tool_name:"Write",
-      tool_input:{file_path:$path}
-    }' | bash "$REPO_ROOT/scripts/check-pretool-gates.sh"
-  )
-)"
-assert_pretool_allow "$allow_output"
+  allow_output="$(
+    (
+      export CLAUDE_PROJECT_DIR="$ALIAS_PROJECT/nested/child"
+      jq -n --arg cwd "$ALIAS_PROJECT/nested/child" --arg path "$ALIAS_PROJECT/src/candidate.ts" '{
+        hook_event_name:"PreToolUse",
+        cwd:$cwd,
+        tool_name:"Write",
+        tool_input:{file_path:$path}
+      }' | bash "$REPO_ROOT/scripts/check-pretool-gates.sh"
+    )
+  )"
+  assert_pretool_allow "$allow_output"
+fi
 
 write_v2_state "$STATE_FILE"
 allow_output="$(run_ask_gate)"

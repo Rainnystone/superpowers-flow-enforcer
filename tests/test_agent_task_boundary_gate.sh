@@ -63,8 +63,8 @@ assert_extracts_metadata() {
   local output
 
   output="$(task_flow_packets_extract_packet_metadata < "$file")"
-  assert_json_equals <(printf '%s' "$output") '.task_id' "\"$expected_task_id\""
-  assert_json_equals <(printf '%s' "$output") '.role' "\"$expected_role\""
+  assert_json_text_equals "$output" '.task_id' "\"$expected_task_id\""
+  assert_json_text_equals "$output" '.role' "\"$expected_role\""
 }
 
 assert_extract_fails() {
@@ -216,8 +216,8 @@ assert_pretool_deny() {
     echo "Expected PreToolUse command hook to deny, got empty output" >&2
     exit 1
   }
-  assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.hookEventName' '"PreToolUse"'
-  assert_json_equals <(printf '%s' "$output") '.hookSpecificOutput.permissionDecision' '"deny"'
+  assert_json_text_equals "$output" '.hookSpecificOutput.hookEventName' '"PreToolUse"'
+  assert_json_text_equals "$output" '.hookSpecificOutput.permissionDecision' '"deny"'
   printf '%s' "$output" | jq -e --arg frag "$reason_fragment" '.hookSpecificOutput.permissionDecisionReason | contains($frag)' >/dev/null 2>&1 || {
     echo "Expected deny reason to contain: $reason_fragment" >&2
     exit 1

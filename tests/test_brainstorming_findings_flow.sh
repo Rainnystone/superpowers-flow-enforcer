@@ -90,9 +90,9 @@ deny_output="$(
   echo "Expected AskUserQuestion command gate to deny when findings were not updated" >&2
   exit 1
 }
-assert_json_equals <(printf '%s' "$deny_output") '.hookSpecificOutput.hookEventName' '"PreToolUse"'
-assert_json_equals <(printf '%s' "$deny_output") '.hookSpecificOutput.permissionDecision' '"deny"'
-assert_json_equals <(printf '%s' "$deny_output") '.hookSpecificOutput.permissionDecisionReason | contains("findings.md")' 'true'
+assert_json_text_equals "$deny_output" '.hookSpecificOutput.hookEventName' '"PreToolUse"'
+assert_json_text_equals "$deny_output" '.hookSpecificOutput.permissionDecision' '"deny"'
+assert_json_text_equals "$deny_output" '.hookSpecificOutput.permissionDecisionReason | contains("findings.md")' 'true'
 
 jq '.workflow.active = false' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"

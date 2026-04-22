@@ -2,6 +2,8 @@
 
 > This plugin supplements superpowers with workflow-aware hooks. Workflow-only gates fail open until the session explicitly enters the superpowers workflow, then the hooks enforce critical phases like brainstorming, TDD, review, and verification.
 
+Supported environments: macOS and native Windows with Git for Windows / Git Bash. PowerShell-only and CMD-only usage are not supported entry points.
+
 ## How It Works
 
 The plugin uses Claude Code hooks to enforce workflow only after explicit workflow entry:
@@ -10,12 +12,14 @@ The plugin uses Claude Code hooks to enforce workflow only after explicit workfl
 - **Pre-Activation Behavior**: If the session never enters the workflow, workflow-only gates stay inactive and ordinary Claude Code work is not blocked by those phase checks.
 - **Manual Control**: Use exact commands after whitespace normalization. Prefer `开启 enforcer` / `enable enforcer` to turn workflow enforcement on and `关闭 enforcer` / `disable enforcer` to turn it off. Long-form compatibility still exists for the exact commands `激活 superpowers enforcer` / `activate superpowers enforcer` and `关闭 superpowers enforcer` / `deactivate superpowers enforcer`. Phrases such as `Please enable enforcer, thanks` do not count. `启动 enforcer`, `停止 enforcer`, `start enforcer`, and `stop enforcer` are NOT SUPPORTED in this round, and `stop` must not be interpreted as disabling enforcement.
 - **Bash Runtime**: `PreToolUse/Bash` is command-only, silent while `workflow.active != true`, and uses the vendored `vendor/bash-traverse` runtime through Node 18+ once the workflow is active.
+- **Requirements**: Node 18+, `jq`, and a Python runtime resolvable as `python3` or `python`.
 - **Brainstorming / Planning**: After activation, SPEC writing still requires self-review and user approval before planning can proceed. Plans must also pass a plan review step (`planning.plan_reviewed`) before worktree creation can proceed; run `record-plan-state.sh plan-reviewed pass` to record a passed review.
 - **Resume Recovery**: On resumed unfinished workflows, run `/superpowers-flow-enforcer:resume-enforcer` before any new edits or Agent dispatch. Recovery reads root-level `task_plan.md` / `progress.md` / `findings.md` first, falls back to `.planning-with-files/` only when needed, and otherwise continues from state plus git context. State tracking includes `resume.recovery_required`, `resume.recovery_completed_at`, and `resume.last_resume_source`.
 - **Midstream Activation**: When the enforcer is activated via `enable enforcer` while a workflow is already in progress (midstream), the hook recovers the current phase from structured state fields rather than defaulting to `init`. Manual enable does not clear the resume gate — if `resume.recovery_required` is set, the resume handshake still needs to complete.
 - **TDD Phase**: Production code is blocked without a verified failing test.
 - **Review Phase**: Task completion requires two-stage review (spec + code quality), and packetized Agent dispatch cannot start the next task's implementer before the current open task has passed both review stages.
 - **Verification / Stop**: Completion claims still need fresh verification evidence from the current `last_assistant_message`. The Stop hook is command-only, and state-based stop gates fail open when state is missing, unreadable, or workflow is inactive. The Stop hook also applies a phase guard: review completion checks only run when `current_phase` is `tdd`, `review`, or `finishing`, preventing deadlocks during brainstorming or planning.
+- **One-Command Test Entry**: From the repo root, run `bash scripts/run-test-suite.sh` to execute every `tests/test_*.sh` script.
 - **Debugging Phase**: Failed test commands still trigger debugging-state sync.
 - **Shell Profile Pollution**: Claude Code sources the user's shell profile (`~/.zshrc`, `~/.bashrc`, etc.) before the configured hook command runs. Unconditional `echo` or `printf` statements in those profile files can prepend noise before hook JSON output, causing parse failures. This is a documented hook runtime limitation, not something this plugin can fix by changing its `hooks.json` command strings. The supported mitigation is to guard profile output so it only runs in interactive shells, for example: `if [[ $- == *i* ]]; then echo "Shell ready"; fi`. This repo does **not** claim that changing `hooks/hooks.json` to `bash --norc ...` fixes that outer-shell profile-sourcing behavior.
 

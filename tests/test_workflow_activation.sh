@@ -2,6 +2,7 @@
 set -euo pipefail
 
 source tests/helpers/assert.sh
+source tests/helpers/platform.sh
 source tests/helpers/state-fixtures.sh
 
 TMP_DIR="$(mktemp -d)"
@@ -80,35 +81,37 @@ if [ "$(jq -c '.workflow.activated_at' "$CLAUDE_PROJECT_DIR/.claude/flow_state.j
   exit 1
 fi
 
-REAL_PROJECT_DIR="$TMP_DIR/real-project"
-PROJECT_ALIAS_DIR="$TMP_DIR/project-alias"
-ALT_ALIAS_DIR="$TMP_DIR/project-alt-alias"
-mkdir -p "$REAL_PROJECT_DIR/.claude" "$REAL_PROJECT_DIR/docs/superpowers/specs" "$REAL_PROJECT_DIR/docs/superpowers/plans"
-mkdir -p "$REAL_PROJECT_DIR/current-project/docs/superpowers/specs" "$REAL_PROJECT_DIR/current-project/docs/superpowers/plans"
-ln -s "$REAL_PROJECT_DIR" "$PROJECT_ALIAS_DIR"
-ln -s "$REAL_PROJECT_DIR" "$ALT_ALIAS_DIR"
-export CLAUDE_PROJECT_DIR="$PROJECT_ALIAS_DIR"
+if platform_require_symlink_support_or_skip "$TMP_DIR"; then
+  REAL_PROJECT_DIR="$TMP_DIR/real-project"
+  PROJECT_ALIAS_DIR="$TMP_DIR/project-alias"
+  ALT_ALIAS_DIR="$TMP_DIR/project-alt-alias"
+  mkdir -p "$REAL_PROJECT_DIR/.claude" "$REAL_PROJECT_DIR/docs/superpowers/specs" "$REAL_PROJECT_DIR/docs/superpowers/plans"
+  mkdir -p "$REAL_PROJECT_DIR/current-project/docs/superpowers/specs" "$REAL_PROJECT_DIR/current-project/docs/superpowers/plans"
+  ln -s "$REAL_PROJECT_DIR" "$PROJECT_ALIAS_DIR"
+  ln -s "$REAL_PROJECT_DIR" "$ALT_ALIAS_DIR"
+  export CLAUDE_PROJECT_DIR="$PROJECT_ALIAS_DIR"
 
-write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"'$ALT_ALIAS_DIR'/docs/superpowers/specs/2026-04-11-alias-demo.md"}}' \
-  | bash scripts/sync-post-tool-state.sh >/dev/null
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"brainstorming"'
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'true'
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' '"spec_write"'
-if [ "$(jq -c '.workflow.activated_at' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json")" = "null" ]; then
-  echo "Expected alias-mixed absolute spec write to set .workflow.activated_at" >&2
-  exit 1
-fi
+  write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+  printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"'$ALT_ALIAS_DIR'/docs/superpowers/specs/2026-04-11-alias-demo.md"}}' \
+    | bash scripts/sync-post-tool-state.sh >/dev/null
+  assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"brainstorming"'
+  assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'true'
+  assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' '"spec_write"'
+  if [ "$(jq -c '.workflow.activated_at' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json")" = "null" ]; then
+    echo "Expected alias-mixed absolute spec write to set .workflow.activated_at" >&2
+    exit 1
+  fi
 
-write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"'$ALT_ALIAS_DIR'/current-project/docs/superpowers/specs/2026-04-11-subtree-alias-demo.md"}}' \
-  | bash scripts/sync-post-tool-state.sh >/dev/null
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"brainstorming"'
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'true'
-assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' '"spec_write"'
-if [ "$(jq -c '.workflow.activated_at' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json")" = "null" ]; then
-  echo "Expected alias-mixed absolute subtree spec write to set .workflow.activated_at" >&2
-  exit 1
+  write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+  printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"'$ALT_ALIAS_DIR'/current-project/docs/superpowers/specs/2026-04-11-subtree-alias-demo.md"}}' \
+    | bash scripts/sync-post-tool-state.sh >/dev/null
+  assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"brainstorming"'
+  assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'true'
+  assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' '"spec_write"'
+  if [ "$(jq -c '.workflow.activated_at' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json")" = "null" ]; then
+    echo "Expected alias-mixed absolute subtree spec write to set .workflow.activated_at" >&2
+    exit 1
+  fi
 fi
 
 unset CLAUDE_PROJECT_DIR
@@ -315,7 +318,7 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.acti
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.override' '"manual_on"'
 
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"/tmp/outside/docs/superpowers/specs/2026-04-11-demo.md"}}' \
+printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"'$TMP_DIR'/outside/docs/superpowers/specs/2026-04-11-demo.md"}}' \
   | bash scripts/sync-post-tool-state.sh >/dev/null
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'

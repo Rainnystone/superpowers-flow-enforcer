@@ -2,8 +2,13 @@
 set -euo pipefail
 
 HOOK_INPUT="$(cat)"
-TEMPLATE="${CLAUDE_PLUGIN_ROOT}/templates/flow_state.json.tmpl"
-MIGRATE_SCRIPT="${CLAUDE_PLUGIN_ROOT}/scripts/migrate-state.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# shellcheck source=lib/platform_compat.sh
+source "$PLUGIN_ROOT/scripts/lib/platform_compat.sh"
+
+TEMPLATE="${PLUGIN_ROOT}/templates/flow_state.json.tmpl"
+MIGRATE_SCRIPT="${PLUGIN_ROOT}/scripts/migrate-state.sh"
 
 resolve_project_dir() {
   if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
@@ -51,7 +56,7 @@ SESSION_START_SOURCE="$(resolve_session_start_source)"
 initialize_state() {
   mkdir -p "$PROJECT_DIR/.claude"
 
-  SESSION_ID=$(date +%s | (sha256sum 2>/dev/null || shasum -a 256) | head -c 16)
+  SESSION_ID="$(date +%s | platform_compat_hash_stdin_sha256 | head -c 16)"
   TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   jq --arg session "$SESSION_ID" \

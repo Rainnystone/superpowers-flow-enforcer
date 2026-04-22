@@ -1,8 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
+TASK_FLOW_PACKETS_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TASK_FLOW_PACKETS_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$TASK_FLOW_PACKETS_SCRIPT_DIR/../.." && pwd)}"
+# shellcheck source=lib/platform_compat.sh
+source "$TASK_FLOW_PACKETS_PLUGIN_ROOT/scripts/lib/platform_compat.sh"
+
 task_flow_packets_extract_packet_metadata() {
-  python3 -c "$(cat <<'PY'
+  platform_compat_run_python -c "$(cat <<'PY'
 import json
 import sys
 
@@ -59,7 +64,7 @@ PY
 }
 
 task_flow_packets_extract_packet_metadata_raw() {
-  python3 -c "$(cat <<'PY'
+  platform_compat_run_python -c "$(cat <<'PY'
 import json
 import sys
 
@@ -113,7 +118,7 @@ PY
 }
 
 task_flow_packets_taskcreated_matches_official_contract() {
-  python3 -c "$(cat <<'PY'
+  platform_compat_run_python -c "$(cat <<'PY'
 import json
 import sys
 
@@ -150,7 +155,7 @@ PY
 }
 
 task_flow_packets_extract_taskcreated_packet_metadata() {
-  python3 -c "$(cat <<'PY'
+  platform_compat_run_python -c "$(cat <<'PY'
 import json
 import sys
 
@@ -206,7 +211,7 @@ PY
 }
 
 task_flow_packets_extract_posttool_packet_metadata() {
-  python3 -c "$(cat <<'PY'
+  platform_compat_run_python -c "$(cat <<'PY'
 import json
 import sys
 

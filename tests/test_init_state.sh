@@ -6,6 +6,12 @@ source tests/helpers/state-fixtures.sh
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
+TEST_INIT_STATE_STDOUT="$TMP_DIR/test-init-state.out"
+TEST_INIT_STATE_STDERR="$TMP_DIR/test-init-state.err"
+TEST_MIGRATE_STATE_STDOUT="$TMP_DIR/test-migrate-state.out"
+TEST_MIGRATE_STATE_STDERR="$TMP_DIR/test-migrate-state.err"
+TEST_MIGRATE_SAFE_STDOUT="$TMP_DIR/test-migrate-safe.out"
+TEST_MIGRATE_SAFE_STDERR="$TMP_DIR/test-migrate-safe.err"
 
 assert_fresh_v2_state() {
   local file="$1"
@@ -263,9 +269,9 @@ write_v2_state_with_broken_workflow "$SESSION_CWD/.claude/flow_state.json"
 export CLAUDE_PROJECT_DIR="$SESSION_CWD"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow.original"
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 workflow scalar" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -276,9 +282,9 @@ assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
 write_v2_state_with_invalid_workflow_override_types "$SESSION_CWD/.claude/flow_state.json"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow-override-fields.original"
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 workflow override field types" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -289,9 +295,9 @@ assert_fresh_v2_state "$SESSION_CWD/.claude/flow_state.json"
 write_v2_state_with_invalid_workflow_types "$SESSION_CWD/.claude/flow_state.json"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-workflow-fields.original"
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 workflow field types" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -303,9 +309,9 @@ write_v2_state_with_invalid_task_flow_role_string "$SESSION_CWD/.claude/flow_sta
 rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-task-flow-role-string.original"
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from invalid task_flow role string" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -317,9 +323,9 @@ write_v2_state_with_invalid_task_flow_role_type "$SESSION_CWD/.claude/flow_state
 rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-task-flow-role-type.original"
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from invalid task_flow role type" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -331,9 +337,9 @@ write_v2_state_with_non_object_task_flow "$SESSION_CWD/.claude/flow_state.json"
 rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-task-flow-non-object.original"
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from non-object task_flow" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -345,9 +351,9 @@ write_v2_state_with_invalid_resume_types "$SESSION_CWD/.claude/flow_state.json"
 rm -f "$SESSION_CWD/.claude/flow_state.json.bak"
 cp "$SESSION_CWD/.claude/flow_state.json" "$TMP_DIR/unsafe-resume-fields.original"
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 resume field types" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -437,7 +443,7 @@ export CLAUDE_PROJECT_DIR="$TMP_DIR/project"
 
 mkdir -p "$CLAUDE_PROJECT_DIR/.claude"
 
-cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
+cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<EOF
 {
   "current_phase": "brainstorming",
   "brainstorming": {
@@ -452,7 +458,7 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
   },
   "worktree": {
     "created": true,
-    "path": "/tmp/worktree",
+    "path": "$TMP_DIR/worktree",
     "baseline_tests_passed": true
   },
   "tdd": {
@@ -503,9 +509,9 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
 {"current_phase":"planning","brainstorming":{"spec_written":true,"findings_updated":false},"planning":{"plan_written":false},"tdd":{"tests_verified_fail":[]}}
 EOF
 
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to migrate a minimal v1 state with missing optional objects" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 
@@ -536,9 +542,9 @@ assert_json_missing "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.brainstormin
 
 printf '{bad json\n' > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 cp "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" "$TMP_DIR/bad-json.original"
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from bad JSON" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -547,9 +553,9 @@ assert_fresh_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 
 write_unsafe_v1_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 cp "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" "$TMP_DIR/unsafe-v1.original"
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v1 state" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -568,9 +574,9 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
 }
 EOF
 cp "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" "$TMP_DIR/unsafe-v1-worktree.original"
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v1 worktree scalar" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -633,9 +639,9 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
 }
 EOF
 cp "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" "$TMP_DIR/unsafe-v2-debugging.original"
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 debugging scalar" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -705,9 +711,9 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
 }
 EOF
 cp "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" "$TMP_DIR/unsafe-v2-tdd-recording.original"
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 tdd recording types" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -775,9 +781,9 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
 }
 EOF
 cp "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" "$TMP_DIR/unsafe-v2-interrupt.original"
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 interrupt scalar" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -797,9 +803,9 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
   }
 }
 EOF
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from unsafe v2 structure" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -859,9 +865,9 @@ cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
   }
 }
 EOF
-if ! bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if ! bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to recover from contradictory phase state" >&2
-  cat /tmp/test-init-state.err >&2
+  cat $TEST_INIT_STATE_STDERR >&2
   exit 1
 fi
 assert_file_exists "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.bak"
@@ -870,28 +876,28 @@ assert_fresh_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
 {"state_version":"two","current_phase":"init"}
 EOF
-if bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to fail for non-numeric state_version" >&2
   exit 1
 fi
-assert_file_contains /tmp/test-init-state.err "unsupported"
+assert_file_contains $TEST_INIT_STATE_STDERR "unsupported"
 
 cat > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" <<'EOF'
 {"state_version":3,"current_phase":"init"}
 EOF
-if bash scripts/init-state.sh >/tmp/test-init-state.out 2>/tmp/test-init-state.err; then
+if bash scripts/init-state.sh >$TEST_INIT_STATE_STDOUT 2>$TEST_INIT_STATE_STDERR; then
   echo "Expected init-state.sh to fail for unknown higher state_version" >&2
   exit 1
 fi
-assert_file_contains /tmp/test-init-state.err "unsupported"
+assert_file_contains $TEST_INIT_STATE_STDERR "unsupported"
 
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 cp "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" "$CLAUDE_PROJECT_DIR/.claude/flow_state.before.json"
-if bash scripts/migrate-state.sh "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-state.out 2>/tmp/test-migrate-state.err; then
+if bash scripts/migrate-state.sh "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_STATE_STDOUT 2>$TEST_MIGRATE_STATE_STDERR; then
   echo "Expected migrate-state.sh to reject v2 state" >&2
   exit 1
 fi
-assert_file_contains /tmp/test-migrate-state.err "v1"
+assert_file_contains $TEST_MIGRATE_STATE_STDERR "v1"
 cmp -s \
   "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" \
   "$CLAUDE_PROJECT_DIR/.claude/flow_state.before.json" || {
@@ -900,9 +906,9 @@ cmp -s \
 }
 
 write_v1_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if ! bash scripts/migrate-state.sh "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-state.out 2>/tmp/test-migrate-state.err; then
+if ! bash scripts/migrate-state.sh "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_STATE_STDOUT 2>$TEST_MIGRATE_STATE_STDERR; then
   echo "Expected migrate-state.sh to migrate v1 state" >&2
-  cat /tmp/test-migrate-state.err >&2
+  cat $TEST_MIGRATE_STATE_STDERR >&2
   exit 1
 fi
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.state_version' '2'
@@ -910,56 +916,56 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.planning.plan
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.planning.plan_reviewed' 'false'
 
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to accept valid task_flow and resume in v2 state" >&2
-  cat /tmp/test-migrate-safe.err >&2
+  cat $TEST_MIGRATE_SAFE_STDERR >&2
   exit 1
 fi
 
 write_v2_state_without_task_flow "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to allow missing task_flow for in-place normalization" >&2
-  cat /tmp/test-migrate-safe.err >&2
+  cat $TEST_MIGRATE_SAFE_STDERR >&2
   exit 1
 fi
 
 write_v2_state_without_resume "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to allow missing resume for in-place normalization" >&2
-  cat /tmp/test-migrate-safe.err >&2
+  cat $TEST_MIGRATE_SAFE_STDERR >&2
   exit 1
 fi
 
 write_v2_state_with_partial_resume "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to allow partial resume for in-place normalization" >&2
-  cat /tmp/test-migrate-safe.err >&2
+  cat $TEST_MIGRATE_SAFE_STDERR >&2
   exit 1
 fi
 
 write_v2_state_with_string_resume_fields "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to accept non-null string resume fields" >&2
-  cat /tmp/test-migrate-safe.err >&2
+  cat $TEST_MIGRATE_SAFE_STDERR >&2
   exit 1
 fi
 
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 jq '.task_flow = null' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp"
 mv "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to reject null task_flow" >&2
   exit 1
 fi
 
 write_v2_state_with_invalid_task_flow_role_string "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to reject invalid task_flow role value" >&2
   exit 1
 fi
 
 write_v2_state_with_invalid_resume_types "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
-if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
+if bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >$TEST_MIGRATE_SAFE_STDOUT 2>$TEST_MIGRATE_SAFE_STDERR; then
   echo "Expected migrate-state.sh --check-safe to reject invalid resume field types" >&2
   exit 1
 fi
