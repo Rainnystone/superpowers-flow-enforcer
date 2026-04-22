@@ -43,6 +43,19 @@ assert_taskcreated_fixture_capture() {
   assert_json_equals "$file" '.team_name' '"Superpowers"'
 }
 
+assert_taskcreated_extracts_metadata() {
+  local file="$1"
+  local expected_task_id="$2"
+  local expected_role="$3"
+  local output
+  local output_file="$TMP_DIR/taskcreated_extract_output.json"
+
+  output="$(task_flow_packets_extract_taskcreated_packet_metadata < "$file")"
+  printf '%s' "$output" > "$output_file"
+  assert_json_equals "$output_file" '.task_id' "\"$expected_task_id\""
+  assert_json_equals "$output_file" '.role' "\"$expected_role\""
+}
+
 assert_extracts_metadata() {
   local file="$1"
   local expected_task_id="$2"
@@ -161,6 +174,18 @@ jq -n '{
   team_name:"Superpowers"
 }' > "$taskcreated_clean_metadata_file"
 assert_selected_success_event "$taskcreated_clean_metadata_file" "$POSTTOOL_FIXTURE" "TaskCreated"
+
+taskcreated_alias_metadata_file="$TMP_DIR/taskcreated_alias_metadata.json"
+jq -n '{
+  hook_event_name:"TaskCreated",
+  task_id:"task-alias-taskcreated",
+  task_subject:"TaskCreated alias coverage",
+  task_description:"SPFE_TASK_ID=task-alias-taskcreated\nSPFE_PACKET_ROLE=code-quality-reviewer\n\nReview the task using the TaskCreated alias path.",
+  teammate_name:"Claude Code",
+  team_name:"Superpowers"
+}' > "$taskcreated_alias_metadata_file"
+assert_taskcreated_extracts_metadata "$taskcreated_alias_metadata_file" "task-alias-taskcreated" "code-quality-reviewer"
+assert_selected_success_event "$taskcreated_alias_metadata_file" "$POSTTOOL_FIXTURE" "TaskCreated"
 
 taskcreated_agent_shape_file="$TMP_DIR/taskcreated_agent_shape.json"
 jq -n '{
