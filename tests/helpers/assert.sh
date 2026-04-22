@@ -11,6 +11,17 @@ assert_json_equals() {
   }
 }
 
+assert_json_text_equals() {
+  local json="$1" jq_expr="$2" expected="$3"
+  shift 3
+  local actual
+  actual="$(printf '%s' "$json" | jq -c "$@" "$jq_expr")"
+  [ "$actual" = "$expected" ] || {
+    echo "Expected $jq_expr = $expected, got $actual" >&2
+    exit 1
+  }
+}
+
 assert_json_missing() {
   local file="$1" jq_expr="$2"
   local path="${jq_expr#.}"

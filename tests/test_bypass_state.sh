@@ -30,11 +30,11 @@ SKIP_PLANNING_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip planning - spec approved"}' "$CLAUDE_PROJECT_DIR" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SKIP_PLANNING_OUTPUT") '.decision' '"block"'
-assert_json_equals <(printf '%s' "$SKIP_PLANNING_OUTPUT") '.reason | contains("确认跳过")' 'true'
-assert_json_equals <(printf '%s' "$SKIP_PLANNING_OUTPUT") '.reason | contains("并给出原因")' 'false'
-assert_json_equals <(printf '%s' "$SKIP_PLANNING_OUTPUT") '.reason | contains("可选")' 'true'
-assert_json_equals <(printf '%s' "$SKIP_PLANNING_OUTPUT") '. | keys | sort' '["decision","reason"]'
+assert_json_text_equals "$SKIP_PLANNING_OUTPUT" '.decision' '"block"'
+assert_json_text_equals "$SKIP_PLANNING_OUTPUT" '.reason | contains("确认跳过")' 'true'
+assert_json_text_equals "$SKIP_PLANNING_OUTPUT" '.reason | contains("并给出原因")' 'false'
+assert_json_text_equals "$SKIP_PLANNING_OUTPUT" '.reason | contains("可选")' 'true'
+assert_json_text_equals "$SKIP_PLANNING_OUTPUT" '. | keys | sort' '["decision","reason"]'
 
 skip_planning_output_objects="$(printf '%s' "$SKIP_PLANNING_OUTPUT" | jq -s 'length')"
 if [ "$skip_planning_output_objects" != "1" ]; then
@@ -70,8 +70,8 @@ SKIP_REVIEW_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip review"}' "$CLAUDE_PROJECT_DIR" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SKIP_REVIEW_OUTPUT") '.decision' '"block"'
-assert_json_equals <(printf '%s' "$SKIP_REVIEW_OUTPUT") '. | keys | sort' '["decision","reason"]'
+assert_json_text_equals "$SKIP_REVIEW_OUTPUT" '.decision' '"block"'
+assert_json_text_equals "$SKIP_REVIEW_OUTPUT" '. | keys | sort' '["decision","reason"]'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.exceptions.skip_review' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.exceptions.pending_confirmation_for' '"review"'
 
@@ -79,8 +79,8 @@ SKIP_PLANNING_RESET_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip planning"}' "$CLAUDE_PROJECT_DIR" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SKIP_PLANNING_RESET_OUTPUT") '.decision' '"block"'
-assert_json_equals <(printf '%s' "$SKIP_PLANNING_RESET_OUTPUT") '. | keys | sort' '["decision","reason"]'
+assert_json_text_equals "$SKIP_PLANNING_RESET_OUTPUT" '.decision' '"block"'
+assert_json_text_equals "$SKIP_PLANNING_RESET_OUTPUT" '. | keys | sort' '["decision","reason"]'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.exceptions.skip_review' 'false'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.exceptions.skip_planning' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.exceptions.pending_confirmation_for' '"planning"'
@@ -96,12 +96,12 @@ SKIP_TEST_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip test - spec approved"}' "$CLAUDE_PROJECT_DIR" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT") '.decision' '"block"'
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT") '. | keys | sort' '["decision","reason"]'
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT") '.reason | contains("tdd")' 'true'
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT") '.reason | contains("test/测试")' 'true'
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT") '.reason | contains("并给出原因")' 'false'
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT") '.reason | contains("可选")' 'true'
+assert_json_text_equals "$SKIP_TEST_OUTPUT" '.decision' '"block"'
+assert_json_text_equals "$SKIP_TEST_OUTPUT" '. | keys | sort' '["decision","reason"]'
+assert_json_text_equals "$SKIP_TEST_OUTPUT" '.reason | contains("tdd")' 'true'
+assert_json_text_equals "$SKIP_TEST_OUTPUT" '.reason | contains("test/测试")' 'true'
+assert_json_text_equals "$SKIP_TEST_OUTPUT" '.reason | contains("并给出原因")' 'false'
+assert_json_text_equals "$SKIP_TEST_OUTPUT" '.reason | contains("可选")' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.exceptions.skip_tdd' 'true'
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.exceptions.pending_confirmation_for' '"tdd"'
 
@@ -119,7 +119,7 @@ SKIP_TEST_OUTPUT_CONFIRM_TEST="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip test - spec approved"}' "$CLAUDE_PROJECT_DIR" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT_CONFIRM_TEST") '.decision' '"block"'
+assert_json_text_equals "$SKIP_TEST_OUTPUT_CONFIRM_TEST" '.decision' '"block"'
 
 printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"confirm skip test because this is infra-only"}' "$CLAUDE_PROJECT_DIR" \
   | bash scripts/sync-user-prompt-state.sh > "$TMP_DIR/confirm-skip-test.json"
@@ -135,7 +135,7 @@ SKIP_TEST_OUTPUT_CONFIRM_CN="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip test - spec approved"}' "$CLAUDE_PROJECT_DIR" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SKIP_TEST_OUTPUT_CONFIRM_CN") '.decision' '"block"'
+assert_json_text_equals "$SKIP_TEST_OUTPUT_CONFIRM_CN" '.decision' '"block"'
 
 printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"确认跳过测试 因为这个改动很小"}' "$CLAUDE_PROJECT_DIR" \
   | bash scripts/sync-user-prompt-state.sh > "$TMP_DIR/confirm-skip-test-cn.json"
@@ -157,7 +157,7 @@ ROOT_STATE_SKIP_PLANNING_FROM_ENV_OUTPUT="$(
       | bash scripts/sync-user-prompt-state.sh
   )
 )"
-assert_json_equals <(printf '%s' "$ROOT_STATE_SKIP_PLANNING_FROM_ENV_OUTPUT") '.decision' '"block"'
+assert_json_text_equals "$ROOT_STATE_SKIP_PLANNING_FROM_ENV_OUTPUT" '.decision' '"block"'
 assert_json_equals "$ROOT_STATE_PROJECT/.claude/flow_state.json" '.exceptions.skip_planning' 'true'
 assert_json_equals "$ROOT_STATE_PROJECT/.claude/flow_state.json" '.exceptions.pending_confirmation_for' '"planning"'
 if [ -e "$ROOT_STATE_PROJECT/nested/child/.claude/flow_state.json" ]; then
@@ -171,7 +171,7 @@ ROOT_STATE_SKIP_PLANNING_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip planning"}' "$ROOT_STATE_PROJECT/nested/child" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$ROOT_STATE_SKIP_PLANNING_OUTPUT") '.decision' '"block"'
+assert_json_text_equals "$ROOT_STATE_SKIP_PLANNING_OUTPUT" '.decision' '"block"'
 assert_json_equals "$ROOT_STATE_PROJECT/.claude/flow_state.json" '.exceptions.skip_planning' 'true'
 assert_json_equals "$ROOT_STATE_PROJECT/.claude/flow_state.json" '.exceptions.pending_confirmation_for' '"planning"'
 if [ -e "$ROOT_STATE_PROJECT/nested/child/.claude/flow_state.json" ]; then
@@ -186,8 +186,8 @@ SELF_HEAL_SKIP_PLANNING_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip planning - spec approved"}' "$SELF_HEAL_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SELF_HEAL_SKIP_PLANNING_OUTPUT") '.decision' '"block"'
-assert_json_equals <(printf '%s' "$SELF_HEAL_SKIP_PLANNING_OUTPUT") '. | keys | sort' '["decision","reason"]'
+assert_json_text_equals "$SELF_HEAL_SKIP_PLANNING_OUTPUT" '.decision' '"block"'
+assert_json_text_equals "$SELF_HEAL_SKIP_PLANNING_OUTPUT" '. | keys | sort' '["decision","reason"]'
 
 assert_file_exists "$SELF_HEAL_PROJECT/.claude/flow_state.json"
 assert_json_equals "$SELF_HEAL_PROJECT/.claude/flow_state.json" '.exceptions.skip_planning' 'true'
@@ -484,7 +484,7 @@ SKIP_AFTER_MANUAL_OFF_OUTPUT="$(
   printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"skip planning"}' "$MANUAL_PROMPT_PROJECT" \
     | bash scripts/sync-user-prompt-state.sh
 )"
-assert_json_equals <(printf '%s' "$SKIP_AFTER_MANUAL_OFF_OUTPUT") '.decision' '"block"'
+assert_json_text_equals "$SKIP_AFTER_MANUAL_OFF_OUTPUT" '.decision' '"block"'
 assert_json_equals "$STATE_FILE" '.workflow.active' 'true'
 assert_json_equals "$STATE_FILE" '.workflow.override' 'null'
 assert_json_equals "$STATE_FILE" '.workflow.activated_by' '"user_prompt_skip"'

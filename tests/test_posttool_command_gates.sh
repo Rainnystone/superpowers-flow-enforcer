@@ -20,8 +20,8 @@ assert_posttool_block() {
     echo "Expected PostToolUse command hook to block, got empty output" >&2
     exit 1
   }
-  assert_json_equals <(printf '%s' "$output") '.decision' '"block"'
-  jq -e --arg frag "$reason_fragment" '.reason | contains($frag)' <(printf '%s' "$output") >/dev/null 2>&1 || {
+  assert_json_text_equals "$output" '.decision' '"block"'
+  assert_json_text_equals "$output" '.reason | contains($frag)' 'true' --arg frag "$reason_fragment" || {
     echo "Expected PostToolUse block reason to contain: $reason_fragment" >&2
     exit 1
   }
