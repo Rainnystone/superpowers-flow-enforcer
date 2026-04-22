@@ -8,6 +8,30 @@
 
 **Tech Stack:** Bash, jq, small embedded Python helpers, Node 18+ for vendored `bash-traverse`, Git Bash on Windows, shell test suite under `tests/`
 
+## Execution Status
+
+- Status: complete
+- Support contract delivered:
+  - macOS
+  - native Windows with Git for Windows / Git Bash
+  - no PowerShell-only or CMD-only support commitment in this round
+- Completed packets:
+  - Task 1: `3e5c3d8`
+  - Task 2: `540e668`
+  - Task 3: `02514c7`
+  - Task 3 follow-up fix: `517c63d`
+  - Task 4: `7b781f5`
+  - Task 5: `33f662a`
+  - Task 6: `68b4e58`
+  - Task 7: `95d1654`
+- Final verification:
+  - `node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 18 ? 0 : 1)'`
+  - `bash scripts/run-test-suite.sh`
+- Review outcome:
+  - Every packet completed main-thread verification plus independent subagent review
+  - Final Task 7 spec review: `No findings.`
+  - Final Task 7 code review: `No findings.`
+
 ---
 
 ## File Structure
