@@ -4,6 +4,8 @@ English | [中文](./README_cn.md)
 
 A Claude Code plugin that acts as a supplement to [obra/superpowers](https://github.com/obra/superpowers) by enforcing workflow-aware hooks after a session explicitly enters the superpowers workflow. It is not a replacement, and it is designed to be used together with [planning-with-files](https://github.com/othmanadi/planning-with-files) for external memory. This repo still ships as a single plugin install: the Bash gate uses the vendored `vendor/bash-traverse` runtime, so there is no separate parser repo clone or build step.
 
+Supported environments: macOS and native Windows with Git for Windows / Git Bash. PowerShell-only and CMD-only usage are not supported entry points.
+
 ## Overview
 
 **Core Principle**: Don't skip steps during execution.
@@ -21,6 +23,12 @@ Workflow entry is explicit, not inferred from every Claude Code session. In the 
 `PreToolUse/Bash` only runs its active gate when `workflow.active == true`. If the workflow is not active, the hook exits silently and does nothing. When active, the gate depends on Node 18+ because it executes the vendored Bash parser runtime through Node.
 
 `planning-with-files` remains part of the intended setup because it provides the durable `task_plan.md`, `findings.md`, and `progress.md` memory that this workflow expects. This is especially useful in Claude Code deployments that route to GLM-5 with a 128K context window, where disk-backed tracking reduces context loss across longer sessions.
+
+## Requirements
+
+- Node 18+
+- `jq`
+- A Python runtime resolvable as `python3` or `python`
 
 ## Installation
 
@@ -49,6 +57,12 @@ If you install or change other plugins during a running session, run:
    ```
 
 No separate `bash-traverse` clone or build is required. The parser runtime is already vendored in this repository, but the active Bash gate does require Node 18+ on the machine where Claude Code runs.
+
+Run the full test suite from the repo root with:
+
+```bash
+bash scripts/run-test-suite.sh
+```
 
 ## Usage
 

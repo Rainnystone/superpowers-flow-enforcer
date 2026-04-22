@@ -4,6 +4,8 @@
 
 一个 Claude Code 插件，在会话**明确进入** superpowers 工作流之后，通过 workflow-aware hooks 强制执行关键阶段。它是 [obra/superpowers](https://github.com/obra/superpowers) 的补充，不是替代品，并且设计上需要配合 [planning-with-files](https://github.com/othmanadi/planning-with-files) 提供外部记忆。这个仓库仍然以单个插件的形式安装：Bash gate 使用仓库内 vendored 的 `vendor/bash-traverse` runtime，不需要额外 clone 或 build parser 仓库。
 
+支持面：macOS，以及原生 Windows 上通过 Git for Windows / Git Bash 运行的环境。Windows 支持指的是 Git for Windows / Git Bash，不承诺 PowerShell-only 或 CMD-only 入口。
+
 ## 概述
 
 **核心原则**: 执行时不跳步骤。
@@ -21,6 +23,12 @@
 `PreToolUse/Bash` 只有在 `workflow.active == true` 时才会运行真正的 gate；如果 workflow 没有激活，它会静默 no-op。激活后，Bash gate 通过 Node 执行 vendored 的 Bash parser runtime，因此需要 Node 18+。
 
 `planning-with-files` 仍然是这个工作流的预期组成部分，因为它提供 `task_plan.md`、`findings.md`、`progress.md` 这套持久化外部记忆。这个定位尤其适合 Claude Code 集成里路由到 GLM-5、只有 128K 上下文窗口的配置，磁盘上的记录可以降低长会话里的上下文丢失。
+
+## 运行要求
+
+- Node 18+
+- `jq`
+- 一个可解析为 `python3` 或 `python` 的 Python runtime
 
 ## 安装
 
@@ -49,6 +57,12 @@
    ```
 
 不需要额外 clone 或 build `bash-traverse`。它已经被 vendored 到这个仓库里；但激活中的 Bash gate 仍然要求运行 Claude Code 的机器上有 Node 18+。
+
+从仓库根目录一键跑完整测试套件：
+
+```bash
+bash scripts/run-test-suite.sh
+```
 
 ## 使用方式
 
