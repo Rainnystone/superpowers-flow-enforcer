@@ -111,6 +111,25 @@ if [ -f "$BOOTSTRAP_NESTED/.claude/flow_state.json" ]; then
   exit 1
 fi
 
+BOOTSTRAP_EXTERNAL_ROOT="$TMP_DIR/bootstrap-external-root"
+BOOTSTRAP_EXTERNAL_CWD="$TMP_DIR/bootstrap-external-cwd"
+mkdir -p "$BOOTSTRAP_EXTERNAL_ROOT" "$BOOTSTRAP_EXTERNAL_CWD"
+
+jq -n --arg cwd "$BOOTSTRAP_EXTERNAL_CWD" --arg prompt 'hello' '{
+  cwd:$cwd,
+  prompt:$prompt
+}' | CLAUDE_PROJECT_DIR="$BOOTSTRAP_EXTERNAL_ROOT" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/scripts/sync-user-prompt-state.sh" >/dev/null
+
+[ -f "$BOOTSTRAP_EXTERNAL_ROOT/.claude/flow_state.json" ] || {
+  echo "Expected sync-user-prompt-state bootstrap to preserve explicit CLAUDE_PROJECT_DIR when payload cwd is outside it" >&2
+  exit 1
+}
+
+if [ -f "$BOOTSTRAP_EXTERNAL_CWD/.claude/flow_state.json" ]; then
+  echo "Expected sync-user-prompt-state bootstrap to avoid creating state under external payload cwd" >&2
+  exit 1
+fi
+
 if ! rg -n 'source .*platform_compat\.sh|\. .*platform_compat\.sh' \
   "$REPO_ROOT/scripts/lib/workflow_paths.sh" >/dev/null; then
   echo "Expected workflow_paths.sh to source platform_compat.sh for shared Python resolution" >&2

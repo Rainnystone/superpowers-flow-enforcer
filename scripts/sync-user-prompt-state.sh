@@ -76,6 +76,11 @@ resolve_project_dir() {
       return
     fi
 
+    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && canonicalize_existing_dir "$CLAUDE_PROJECT_DIR" >/dev/null; then
+      printf '%s\n' "$CLAUDE_PROJECT_DIR"
+      return
+    fi
+
     printf '%s\n' "$hook_cwd"
     return
   fi
