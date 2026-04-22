@@ -13,6 +13,7 @@ assert_fresh_v2_state() {
   assert_json_equals "$file" '.current_phase' '"init"'
   assert_json_equals "$file" '.brainstorming.question_asked' 'false'
   assert_json_equals "$file" '.brainstorming.findings_updated_after_question' 'false'
+  assert_json_equals "$file" '.planning.plan_reviewed' 'false'
   assert_json_equals "$file" '.worktree.baseline_verified' 'false'
   assert_json_equals "$file" '.tdd.pending_failure_record' 'false'
   assert_json_equals "$file" '.tdd.last_failed_command' 'null'

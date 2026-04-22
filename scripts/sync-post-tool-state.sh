@@ -52,7 +52,6 @@ TOOL_NAME="$(echo "$INPUT" | jq -r '.tool_name // ""')"
 NOW_UTC="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 tmp_file="${STATE_FILE}.tmp"
 SPEC_WRITE_RECORDED=false
-PLAN_WRITE_RECORDED=false
 WORKTREE_ADD_RECORDED=false
 
 update_state() {
@@ -1274,7 +1273,6 @@ if [ "$TOOL_NAME" = "Write" ] || [ "$TOOL_NAME" = "Edit" ]; then
         | .workflow.activated_at = $now
       ' "$STATE_FILE" > "$tmp_file"
       mv "$tmp_file" "$STATE_FILE"
-      PLAN_WRITE_RECORDED=true
     fi
 
     if echo "$FILE_PATH" | grep -qE '(^|/)(test|tests|spec|__tests__)/|\.test\.|\.spec\.|_test\.|_spec\.'; then
@@ -1349,7 +1347,7 @@ if [ "$HOOK_EVENT" = "PostToolUse" ]; then
     block_posttool "SPEC 已写入，必须先完成 Self-Review 并让用户批准后再进入 planning。"
   fi
 
-  if [ "$PLAN_WRITE_RECORDED" = "true" ] && ! state_is_true '.planning.plan_reviewed' && ! state_is_true '.worktree.created'; then
+  if state_is_true '.planning.plan_written' && ! state_is_true '.planning.plan_reviewed'; then
     block_posttool "Plan 已写入，请先完成 plan review，再进入 worktree 阶段。"
   fi
 

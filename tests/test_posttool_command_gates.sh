@@ -120,7 +120,7 @@ assert_json_equals "$STATE_FILE" '.planning.plan_written' 'true'
 assert_json_equals "$STATE_FILE" '.planning.plan_file' '"docs/superpowers/plans/demo.md"'
 assert_json_equals "$STATE_FILE" '.planning.plan_reviewed' 'false'
 
-# P4: after plan_reviewed=true and worktree created, re-writing plan is allowed
+# P4: re-writing a reviewed plan resets the local hold and requires plan review again
 write_v2_state "$STATE_FILE"
 jq '
   .brainstorming.spec_reviewed = true
@@ -128,8 +128,9 @@ jq '
   | .worktree.created = true
 ' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
-plan_allow_output="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
-assert_posttool_allow "$plan_allow_output"
+plan_rereview_block_output="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
+assert_posttool_block "$plan_rereview_block_output" 'plan review'
+assert_json_equals "$STATE_FILE" '.planning.plan_reviewed' 'false'
 
 # P4: after plan_reviewed=true, non-plan write hits existing worktree gate (not plan-review gate)
 write_v2_state "$STATE_FILE"
@@ -158,6 +159,18 @@ plan_block_output_1="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
 assert_posttool_block "$plan_block_output_1" 'plan review'
 plan_block_output_2="$(run_posttool_write 'docs/superpowers/plans/demo.md')"
 assert_posttool_block "$plan_block_output_2" 'plan review'
+
+# P4: non-plan writes remain blocked by persistent plan-review hold until review passes
+write_v2_state "$STATE_FILE"
+jq '
+  .brainstorming.spec_reviewed = true
+  | .planning.plan_written = true
+  | .planning.plan_file = "docs/superpowers/plans/demo.md"
+  | .planning.plan_reviewed = false
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+plan_followup_block_output="$(run_posttool_write 'docs/superpowers/other.md')"
+assert_posttool_block "$plan_followup_block_output" 'plan review'
 
 # Verify both block messages are identical (no confusing drift on re-edit)
 msg_1="$(printf '%s' "$plan_block_output_1" | jq -r '.reason')"
