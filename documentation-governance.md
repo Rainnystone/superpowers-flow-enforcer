@@ -12,7 +12,7 @@ It does not replace `AGENTS.md` or `coding-agent-guide.md`.
 - `coding-agent-guide.md` is the quick routing and first-packet guide.
 - `CLAUDE.md` is shipped as part of the plugin repository and is not the active workspace instruction file.
 - `README.md` and `README_cn.md` are user-facing plugin docs.
-- `docs/superpowers/specs/` and `docs/superpowers/plans/` are the reserved active surfaces for the next workstream, while prior implementation records now live in `archive/2026-04-superpowers-flow-enforcer-implementation/`.
+- `docs/superpowers/specs/` and `docs/superpowers/plans/` are the reserved active surfaces for the current workstream, while archived records now live under `archive/`.
 
 ## Active vs Archive Rules
 
@@ -45,12 +45,13 @@ It does not replace `AGENTS.md` or `coding-agent-guide.md`.
 | Active specs | `docs/superpowers/specs/` |
 | Active plans | `docs/superpowers/plans/` |
 | Conditional root tracking | `task_plan.md`, `progress.md`, `findings.md` |
-| Current archive root | `archive/2026-04-superpowers-flow-enforcer-implementation/` |
+| Archive root | `archive/` |
 
 ## Archive Structure
 
-- The current archived workstream lives at `archive/2026-04-superpowers-flow-enforcer-implementation/`.
-- That container holds related specs, plans, and renamed tracking files for one completed implementation workstream.
+- Archived workstreams now live under `archive/`.
+- `archive/2026-04-superpowers-flow-enforcer-implementation/` holds the prior implementation workstream.
+- `archive/2026-04-21-fix-p0-p5-compatibility-root-tracking/` holds the latest archived root tracking snapshot.
 - Future archived workstreams should follow the same distinct-container pattern, such as `archive/YYYY-MM-DD-topic/`.
 - Do not leave archived snapshots mixed into active root tracking or active spec and plan directories once a deliberate archive pass is performed.
 
@@ -89,8 +90,9 @@ Do not load historical plans, broad spec collections, or stale tracking files by
 - `AGENTS.md` is the active instruction file for this workspace.
 - `CLAUDE.md` remains in the repo because the repository itself is a Claude Code plugin.
 - The previous implementation workstream has been archived under `archive/2026-04-superpowers-flow-enforcer-implementation/`.
-- An active workstream is in progress with root `task_plan.md`, `progress.md`, and `findings.md` surfaces.
-- Active spec and plan files exist under `docs/superpowers/specs/` and `docs/superpowers/plans/` for the current workstream.
+- The latest archived root tracking snapshot lives under `archive/2026-04-21-fix-p0-p5-compatibility-root-tracking/`.
+- Root `task_plan.md`, `progress.md`, and `findings.md` are active again for the current workstream.
+- Active spec and plan files still exist under `docs/superpowers/specs/` and `docs/superpowers/plans/` for the current workstream.
 
 ## Transition Rules
 

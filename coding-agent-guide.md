@@ -13,7 +13,7 @@ It covers task routing, first packet landing zones, and default verification.
 - `CLAUDE.md` is part of the plugin payload and product documentation, not the active workspace instruction surface.
 - This plugin is a strong adaptation layer on top of two upstream skills already installed in the environment: `using-superpowers` and `planning-with-files-zh`.
 - For workflow, phase, tracking-file, resume, review, or verification behavior, treat those two skills as upstream execution sources rather than treating this repo as self-defining.
-- Archived design and implementation history for the previous workstream now lives under `archive/2026-04-superpowers-flow-enforcer-implementation/`.
+- Archived design and implementation history for prior workstreams now lives under `archive/`.
 
 ## First Read Order
 
@@ -32,7 +32,7 @@ It covers task routing, first packet landing zones, and default verification.
 - The repository does not own the full workflow contract by itself; it supplements `using-superpowers` and `planning-with-files-zh`.
 - An active workstream is in progress: `docs/superpowers/specs/fix-p0-p1-compatibility.md` and `docs/superpowers/plans/2026-04-21-fix-p0-p1-p2-p3-compatibility.md` are the current active spec and plan surfaces.
 - Root `task_plan.md`, `progress.md`, and `findings.md` are active for the current workstream.
-- Historical implementation context for the archived workstream now lives under `archive/2026-04-superpowers-flow-enforcer-implementation/`.
+- Historical implementation context for prior workstreams now lives under `archive/`, especially `archive/2026-04-superpowers-flow-enforcer-implementation/`.
 
 ## Task Routing
 
@@ -40,7 +40,7 @@ It covers task routing, first packet landing zones, and default verification.
 | --- | --- |
 | Hook event mismatch or missing hook | `hooks/hooks.json`, `tests/test_hooks_official_events.sh` |
 | Workflow-phase, review, finishing, or verification semantic drift | Upstream `using-superpowers` skill doc first, then `README.md`, `CLAUDE.md`, and the enforcing scripts/tests |
-| Tracking-file lifecycle, recovery, or active-root-file behavior drift | Upstream `planning-with-files-zh` skill doc first, then root tracking files and resume-related scripts/tests |
+| Tracking-file lifecycle, recovery, or active-root-file behavior drift | Upstream `planning-with-files-zh` skill doc first, then root tracking files and the resume-related scripts/tests |
 | Historical implementation context for prior work | `archive/2026-04-superpowers-flow-enforcer-implementation/`, then the current scripts/tests the change would affect |
 | State bootstrap or migration bug | `templates/flow_state.json.tmpl`, `scripts/init-state.sh`, `scripts/migrate-state.sh`, `tests/test_init_state.sh` |
 | PreTool gating bug for Edit, Write, AskUserQuestion, or Agent | `scripts/check-pretool-gates.sh`, related `tests/test_pretool_command_gates.sh` or focused shell tests |
