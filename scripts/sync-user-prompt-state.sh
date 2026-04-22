@@ -172,23 +172,30 @@ recover_phase_from_state() {
 
   # Artifact fallback: reuse canonical path classification semantics.
   if [ -d "$project_dir" ]; then
+    local candidate_paths_file
     local candidate_path=""
     local rel_path=""
     local artifact_kind=""
     local spec_found="false"
+
+    candidate_paths_file="$(mktemp "${TMPDIR:-/tmp}/spfe-markdown-candidates.XXXXXX")"
+    find "$project_dir" -type f -name '*.md' -print0 2>/dev/null > "$candidate_paths_file" || true
 
     while IFS= read -r -d '' candidate_path; do
       rel_path="${candidate_path#"$project_dir"/}"
       artifact_kind="$(workflow_paths_classify_canonical_write "$rel_path")"
       case "$artifact_kind" in
         plan)
+          rm -f "$candidate_paths_file"
           echo "planning"; return 0
           ;;
         spec)
           spec_found="true"
           ;;
       esac
-    done < <(find "$project_dir" -type f -name '*.md' -print0 2>/dev/null)
+    done < "$candidate_paths_file"
+
+    rm -f "$candidate_paths_file"
 
     if [ "$spec_found" = "true" ]; then
       echo "brainstorming"; return 0

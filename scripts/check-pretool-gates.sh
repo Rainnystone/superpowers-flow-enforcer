@@ -246,31 +246,40 @@ has_verified_failing_candidate() {
   local -a candidates=()
   local -a failed_tests=()
   local line
+  local candidate_tests_file failed_tests_file
+
+  candidate_tests_file="$(mktemp "${TMPDIR:-/tmp}/spfe-candidate-tests.XXXXXX")"
+  failed_tests_file="$(mktemp "${TMPDIR:-/tmp}/spfe-failed-tests.XXXXXX")"
+
+  infer_candidate_tests "$path" > "$candidate_tests_file"
+  jq -r '.tdd.tests_verified_fail[]? | select(type == "string")' "$STATE_FILE" > "$failed_tests_file" 2>/dev/null || true
 
   while IFS= read -r line; do
     candidates+=("$line")
-  done < <(infer_candidate_tests "$path")
+  done < "$candidate_tests_file"
 
   while IFS= read -r line; do
     failed_tests+=("$line")
-  done < <(jq -r '.tdd.tests_verified_fail[]? | select(type == "string")' "$STATE_FILE")
+  done < "$failed_tests_file"
 
   for failed in "${failed_tests[@]-}"; do
     normalized_failed="$(normalize_recorded_path "$failed")"
     for candidate in "${candidates[@]-}"; do
       if [ "$normalized_failed" = "$candidate" ]; then
+        rm -f "$candidate_tests_file" "$failed_tests_file"
         return 0
       fi
     done
   done
 
+  rm -f "$candidate_tests_file" "$failed_tests_file"
   return 1
 }
 
 PROJECT_DIR="$(resolve_project_dir)"
-PROJECT_DIR_LOGICAL_ROOT="$(resolve_logical_state_root_from_candidate "${CLAUDE_PROJECT_DIR:-}")"
+PROJECT_DIR_LOGICAL_ROOT="$(resolve_logical_state_root_from_candidate "${CLAUDE_PROJECT_DIR:-}" || true)"
 if [ -z "$PROJECT_DIR_LOGICAL_ROOT" ]; then
-  PROJECT_DIR_LOGICAL_ROOT="$(resolve_logical_state_root_from_candidate "$(hook_cwd_from_input)")"
+  PROJECT_DIR_LOGICAL_ROOT="$(resolve_logical_state_root_from_candidate "$(hook_cwd_from_input)" || true)"
 fi
 STATE_FILE="$PROJECT_DIR/.claude/flow_state.json"
 
