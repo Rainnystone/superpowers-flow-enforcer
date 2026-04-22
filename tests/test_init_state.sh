@@ -899,6 +899,16 @@ cmp -s \
   exit 1
 }
 
+write_v1_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+if ! bash scripts/migrate-state.sh "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-state.out 2>/tmp/test-migrate-state.err; then
+  echo "Expected migrate-state.sh to migrate v1 state" >&2
+  cat /tmp/test-migrate-state.err >&2
+  exit 1
+fi
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.state_version' '2'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.planning.plan_written' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.planning.plan_reviewed' 'false'
+
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 if ! bash scripts/migrate-state.sh --check-safe "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" >/tmp/test-migrate-safe.out 2>/tmp/test-migrate-safe.err; then
   echo "Expected migrate-state.sh --check-safe to accept valid task_flow and resume in v2 state" >&2

@@ -68,6 +68,11 @@ run_posttool_write_with_cwd() {
   }' | bash scripts/sync-post-tool-state.sh
 }
 
+run_record_plan_state() {
+  local result="$1"
+  bash scripts/record-plan-state.sh plan-reviewed "$result"
+}
+
 run_task_completed() {
   local output_file="$1"
   local error_file="$2"
@@ -171,6 +176,26 @@ jq '
 mv "$TMP_DIR/state.json" "$STATE_FILE"
 plan_followup_block_output="$(run_posttool_write 'docs/superpowers/other.md')"
 assert_posttool_block "$plan_followup_block_output" 'plan review'
+
+# P4: record-plan-state.sh clears the plan-review hold and re-enables the worktree gate
+write_v2_state "$STATE_FILE"
+jq '
+  .brainstorming.spec_reviewed = true
+  | .planning.plan_written = true
+  | .planning.plan_file = "docs/superpowers/plans/demo.md"
+  | .planning.plan_reviewed = false
+' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+run_record_plan_state pass
+assert_json_equals "$STATE_FILE" '.planning.plan_reviewed' 'true'
+plan_review_cleared_output="$(run_posttool_write 'docs/superpowers/other.md')"
+assert_posttool_block "$plan_review_cleared_output" 'worktree'
+
+# P4: record-plan-state.sh fail puts the session back on the plan-review hold
+run_record_plan_state fail
+assert_json_equals "$STATE_FILE" '.planning.plan_reviewed' 'false'
+plan_review_failed_output="$(run_posttool_write 'docs/superpowers/other.md')"
+assert_posttool_block "$plan_review_failed_output" 'plan review'
 
 # Verify both block messages are identical (no confusing drift on re-edit)
 msg_1="$(printf '%s' "$plan_block_output_1" | jq -r '.reason')"
