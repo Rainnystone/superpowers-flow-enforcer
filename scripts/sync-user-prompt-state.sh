@@ -11,61 +11,39 @@ if ! printf '%s' "$INPUT" | jq empty >/dev/null 2>&1; then
   exit 0
 fi
 
-resolve_state_root_from_candidate() {
-  local candidate="$1"
-  if [ -z "$candidate" ]; then
-    return
-  fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+INIT_STATE_SCRIPT="$SCRIPT_DIR/init-state.sh"
+# shellcheck source=lib/workflow_paths.sh
+source "$SCRIPT_DIR/lib/workflow_paths.sh"
 
-  local current="$candidate"
-  if [ ! -d "$current" ]; then
-    current="$(dirname "$current")"
-  fi
-
-  if [ ! -d "$current" ]; then
-    return
-  fi
-
-  current="$(cd "$current" 2>/dev/null && pwd -P)" || return
-
-  while :; do
-    if [ -f "$current/.claude/flow_state.json" ]; then
-      printf '%s\n' "$current"
-      return
-    fi
-
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
-  done
-}
-
-resolve_project_dir() {
-  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-    local resolved
-    resolved="$(resolve_state_root_from_candidate "$CLAUDE_PROJECT_DIR")"
-    if [ -n "$resolved" ]; then
-      printf '%s\n' "$resolved"
-      return
-    fi
-
-    printf '%s\n' "$CLAUDE_PROJECT_DIR"
-    return
-  fi
-
-  local hook_cwd
-  hook_cwd="$(printf '%s' "$INPUT" | jq -r '
+hook_cwd_from_input() {
+  printf '%s' "$INPUT" | jq -r '
     if (.cwd | type) == "string" and .cwd != "" then
       .cwd
     else
       empty
     end
-  ' 2>/dev/null || true)"
+  ' 2>/dev/null || true
+}
+
+resolve_project_dir() {
+  local hook_cwd=""
+
+  hook_cwd="$(hook_cwd_from_input)"
+
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    local resolved
+    resolved="$(workflow_paths_resolve_state_root_from_candidate "$CLAUDE_PROJECT_DIR")"
+    if [ -n "$resolved" ]; then
+      printf '%s\n' "$resolved"
+      return
+    fi
+  fi
+
   if [ -n "$hook_cwd" ]; then
     local resolved
-    resolved="$(resolve_state_root_from_candidate "$hook_cwd")"
+    resolved="$(workflow_paths_resolve_state_root_from_candidate "$hook_cwd")"
     if [ -n "$resolved" ]; then
       printf '%s\n' "$resolved"
       return
@@ -75,16 +53,16 @@ resolve_project_dir() {
     return
   fi
 
+  if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+    printf '%s\n' "$CLAUDE_PROJECT_DIR"
+    return
+  fi
+
   printf '%s\n' "$PWD"
 }
 
 PROJECT_DIR="$(resolve_project_dir)"
 STATE_FILE="$PROJECT_DIR/.claude/flow_state.json"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-INIT_STATE_SCRIPT="$SCRIPT_DIR/init-state.sh"
-# shellcheck source=lib/workflow_paths.sh
-source "$SCRIPT_DIR/lib/workflow_paths.sh"
 
 bootstrap_state_if_missing() {
   if [ -f "$STATE_FILE" ]; then

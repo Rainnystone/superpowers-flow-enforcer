@@ -10,43 +10,15 @@ if ! printf '%s' "$INPUT" | jq empty >/dev/null 2>&1; then
   exit 0
 fi
 
-resolve_state_root_from_candidate() {
-  local candidate="$1"
-
-  if [ -z "$candidate" ]; then
-    return
-  fi
-
-  local current="$candidate"
-  if [ ! -d "$current" ]; then
-    current="$(dirname "$current")"
-  fi
-
-  if [ ! -d "$current" ]; then
-    return
-  fi
-
-  current="$(cd "$current" 2>/dev/null && pwd -P)" || return
-
-  while :; do
-    if [ -f "$current/.claude/flow_state.json" ]; then
-      printf '%s\n' "$current"
-      return
-    fi
-
-    if [ "$current" = "/" ]; then
-      return
-    fi
-
-    current="$(dirname "$current")"
-  done
-}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/workflow_paths.sh
+source "$SCRIPT_DIR/lib/workflow_paths.sh"
 
 resolve_project_dir() {
   local resolved=""
 
   if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-    resolved="$(resolve_state_root_from_candidate "$CLAUDE_PROJECT_DIR")"
+    resolved="$(workflow_paths_resolve_state_root_from_candidate "$CLAUDE_PROJECT_DIR")"
     if [ -n "$resolved" ]; then
       printf '%s\n' "$resolved"
       return
@@ -63,7 +35,7 @@ resolve_project_dir() {
   ' 2>/dev/null || true)"
 
   if [ -n "$hook_cwd" ]; then
-    resolved="$(resolve_state_root_from_candidate "$hook_cwd")"
+    resolved="$(workflow_paths_resolve_state_root_from_candidate "$hook_cwd")"
     if [ -n "$resolved" ]; then
       printf '%s\n' "$resolved"
       return
