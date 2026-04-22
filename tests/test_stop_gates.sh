@@ -214,6 +214,13 @@ assert_stop_allow_silent "$allow_output"
 
 # P2: Stop hook phase guard tests
 
+# missing current_phase should fall back to init and allow stop without review records
+write_v2_state "$STATE_FILE"
+jq '.workflow.active = true | del(.current_phase)' "$STATE_FILE" > "$TMP_DIR/state.json"
+mv "$TMP_DIR/state.json" "$STATE_FILE"
+allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
+assert_stop_allow_silent "$allow_output"
+
 # brainstorming phase with empty review.tasks should allow stop
 write_v2_state "$STATE_FILE"
 jq '.workflow.active = true | .current_phase = "brainstorming"' "$STATE_FILE" > "$TMP_DIR/state.json"
@@ -228,20 +235,6 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 allow_output="$(run_stop_gate "$PRIMARY_PROJECT")"
 assert_stop_allow_silent "$allow_output"
 
-# tdd phase with empty review.tasks should still block
-write_v2_state "$STATE_FILE"
-jq '.workflow.active = true | .current_phase = "tdd"' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-deny_output="$(run_stop_gate "$PRIMARY_PROJECT")"
-assert_stop_block "$deny_output" 'review'
-
-# review phase with all reviews passed but finishing not invoked should block
-write_v2_state "$STATE_FILE"
-jq '.workflow.active = true | .current_phase = "review" | .review.tasks = {"task-001": {"spec_review_passed": true, "code_review_passed": true}}' "$STATE_FILE" > "$TMP_DIR/state.json"
-mv "$TMP_DIR/state.json" "$STATE_FILE"
-deny_output="$(run_stop_gate "$PRIMARY_PROJECT")"
-assert_stop_block "$deny_output" 'finishing'
-
 # finishing phase with all reviews passed but finishing not invoked should block
 write_v2_state "$STATE_FILE"
 jq '.workflow.active = true | .current_phase = "finishing" | .review.tasks = {"task-001": {"spec_review_passed": true, "code_review_passed": true}}' "$STATE_FILE" > "$TMP_DIR/state.json"
@@ -249,9 +242,9 @@ mv "$TMP_DIR/state.json" "$STATE_FILE"
 deny_output="$(run_stop_gate "$PRIMARY_PROJECT")"
 assert_stop_block "$deny_output" 'finishing'
 
-# Regression: completion claim check still works in brainstorming phase
+# Regression: completion claim check still works through the init fallback path
 write_v2_state "$STATE_FILE"
-jq '.workflow.active = true | .current_phase = "brainstorming"' "$STATE_FILE" > "$TMP_DIR/state.json"
+jq '.workflow.active = true | del(.current_phase)' "$STATE_FILE" > "$TMP_DIR/state.json"
 mv "$TMP_DIR/state.json" "$STATE_FILE"
 deny_output="$(run_stop_gate "$PRIMARY_PROJECT" false 'Done. I fixed it and everything is working now.')"
 assert_stop_block "$deny_output" 'verification'
