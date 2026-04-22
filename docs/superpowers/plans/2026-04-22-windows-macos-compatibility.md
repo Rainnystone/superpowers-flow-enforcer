@@ -71,7 +71,7 @@ All tasks are **serial by default**. Several packets touch shared helper files o
 
 **Reviewer Focus:** Python fallback order, hash fallback order, explicit error behavior, and no dependence on Linux-only pseudo-files.
 
-- [ ] **Step 1: Write the failing helper test**
+- [x] **Step 1: Write the failing helper test**
 
 Create `tests/test_platform_compat.sh` with focused coverage for:
 - fallback from a non-working `python3` stub to a working `python`
@@ -114,7 +114,7 @@ assert_file_contains "$PYTHON_STDOUT" "$FAKE_BIN/python"
 Run: `bash tests/test_platform_compat.sh`  
 Expected: FAIL because `scripts/lib/platform_compat.sh` does not exist yet.
 
-- [ ] **Step 2: Write the minimal compatibility helper**
+- [x] **Step 2: Write the minimal compatibility helper**
 
 Create `scripts/lib/platform_compat.sh`:
 
@@ -162,7 +162,7 @@ platform_compat_hash_stdin_sha256() {
 }
 ```
 
-- [ ] **Step 3: Finish the focused test with fake hash backends**
+- [x] **Step 3: Finish the focused test with fake hash backends**
 
 Expand `tests/test_platform_compat.sh` to cover hash fallback and missing-Python failure:
 
@@ -191,12 +191,12 @@ fi
 assert_file_contains "$MISSING_STDERR" "No working Python interpreter found"
 ```
 
-- [ ] **Step 4: Run the focused test to green**
+- [x] **Step 4: Run the focused test to green**
 
 Run: `bash tests/test_platform_compat.sh`  
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/lib/platform_compat.sh tests/test_platform_compat.sh
