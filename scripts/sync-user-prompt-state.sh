@@ -27,6 +27,28 @@ hook_cwd_from_input() {
   ' 2>/dev/null || true
 }
 
+canonicalize_existing_dir() {
+  local candidate="$1"
+
+  if [ -z "$candidate" ] || [ ! -d "$candidate" ]; then
+    return 1
+  fi
+
+  cd "$candidate" 2>/dev/null && pwd -P
+}
+
+hook_cwd_is_within_explicit_project_dir() {
+  local explicit_project_dir="$1"
+  local hook_cwd="$2"
+  local explicit_root=""
+  local hook_root=""
+
+  explicit_root="$(canonicalize_existing_dir "$explicit_project_dir")" || return 1
+  hook_root="$(canonicalize_existing_dir "$hook_cwd")" || return 1
+
+  [ "$hook_root" = "$explicit_root" ] || [[ "$hook_root" == "$explicit_root"/* ]]
+}
+
 resolve_project_dir() {
   local hook_cwd=""
 
@@ -46,6 +68,11 @@ resolve_project_dir() {
     resolved="$(workflow_paths_resolve_state_root_from_candidate "$hook_cwd")"
     if [ -n "$resolved" ]; then
       printf '%s\n' "$resolved"
+      return
+    fi
+
+    if [ -n "${CLAUDE_PROJECT_DIR:-}" ] && hook_cwd_is_within_explicit_project_dir "$CLAUDE_PROJECT_DIR" "$hook_cwd"; then
+      printf '%s\n' "$CLAUDE_PROJECT_DIR"
       return
     fi
 
@@ -149,6 +176,7 @@ recover_phase_from_state() {
     local rel_path=""
     local artifact_kind=""
     local spec_found="false"
+
     while IFS= read -r -d '' candidate_path; do
       rel_path="${candidate_path#"$project_dir"/}"
       artifact_kind="$(workflow_paths_classify_canonical_write "$rel_path")"

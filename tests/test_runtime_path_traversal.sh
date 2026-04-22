@@ -92,6 +92,25 @@ jq -e '
   exit 1
 }
 
+BOOTSTRAP_ROOT="$TMP_DIR/bootstrap-root"
+BOOTSTRAP_NESTED="$BOOTSTRAP_ROOT/nested/child"
+mkdir -p "$BOOTSTRAP_NESTED"
+
+jq -n --arg cwd "$BOOTSTRAP_NESTED" --arg prompt 'hello' '{
+  cwd:$cwd,
+  prompt:$prompt
+}' | CLAUDE_PROJECT_DIR="$BOOTSTRAP_ROOT" CLAUDE_PLUGIN_ROOT="$REPO_ROOT" bash "$REPO_ROOT/scripts/sync-user-prompt-state.sh" >/dev/null
+
+[ -f "$BOOTSTRAP_ROOT/.claude/flow_state.json" ] || {
+  echo "Expected sync-user-prompt-state bootstrap to prefer explicit CLAUDE_PROJECT_DIR when payload cwd is nested under it" >&2
+  exit 1
+}
+
+if [ -f "$BOOTSTRAP_NESTED/.claude/flow_state.json" ]; then
+  echo "Expected sync-user-prompt-state bootstrap to avoid creating nested state under payload cwd" >&2
+  exit 1
+fi
+
 if ! rg -n 'source .*platform_compat\.sh|\. .*platform_compat\.sh' \
   "$REPO_ROOT/scripts/lib/workflow_paths.sh" >/dev/null; then
   echo "Expected workflow_paths.sh to source platform_compat.sh for shared Python resolution" >&2
