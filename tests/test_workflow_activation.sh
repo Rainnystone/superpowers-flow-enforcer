@@ -284,6 +284,22 @@ assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.acti
 assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
 
 write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"fixtures/docs/superpowers/specs/2026-04-11-demo.md"}}' \
+  | bash scripts/sync-post-tool-state.sh >/dev/null
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
+printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"current-project/__fixtures__/docs/superpowers/plans/2026-04-11-demo.md"}}' \
+  | bash scripts/sync-post-tool-state.sh >/dev/null
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.current_phase' '"init"'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.active' 'false'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_by' 'null'
+assert_json_equals "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" '.workflow.activated_at' 'null'
+
+write_v2_state "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 jq '.workflow.override = "manual_off" | .workflow.active = false' "$CLAUDE_PROJECT_DIR/.claude/flow_state.json" > "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp"
 mv "$CLAUDE_PROJECT_DIR/.claude/flow_state.json.tmp" "$CLAUDE_PROJECT_DIR/.claude/flow_state.json"
 printf '%s' '{"tool_name":"Write","tool_input":{"file_path":"current-project/docs/superpowers/specs/2026-04-11-manual-off-demo.md"}}' \

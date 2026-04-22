@@ -1108,7 +1108,24 @@ if [ -n "$P5_ARTIFACT_SPEC_OUTPUT" ]; then
 fi
 assert_json_equals "$STATE_FILE" '.current_phase' '"brainstorming"'
 
-# Codex review fix [P1]: active reviewer role should recover to "review" before tdd
+# P5: Artifact fallback prefers planning when both canonical plan and spec artifacts exist
+write_v2_state "$STATE_FILE"
+mkdir -p "$MANUAL_PROMPT_PROJECT/docs/superpowers/specs"
+touch "$MANUAL_PROMPT_PROJECT/docs/superpowers/specs/test-spec.md"
+mkdir -p "$MANUAL_PROMPT_PROJECT/current-project/docs/superpowers/plans"
+touch "$MANUAL_PROMPT_PROJECT/current-project/docs/superpowers/plans/test-plan.md"
+P5_ARTIFACT_PLAN_PRIORITY_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+rm -rf "$MANUAL_PROMPT_PROJECT/docs" "$MANUAL_PROMPT_PROJECT/current-project"
+if [ -n "$P5_ARTIFACT_PLAN_PRIORITY_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer mixed artifact fallback to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"planning"'
+
+# P5: reviewer metadata alone must not force "review" ahead of the tdd fallback
 write_v2_state "$STATE_FILE"
 jq '.worktree.created = true | .worktree.baseline_verified = true | .task_flow.active_packet_role = "code-reviewer"' "$STATE_FILE" > "$STATE_FILE.tmp"
 mv "$STATE_FILE.tmp" "$STATE_FILE"
@@ -1117,7 +1134,37 @@ P5_REVIEWER_ROLE_OUTPUT="$(
     | bash scripts/sync-user-prompt-state.sh
 )"
 if [ -n "$P5_REVIEWER_ROLE_OUTPUT" ]; then
-  echo "P5: Expected enable enforcer reviewer-role recovery to be silent allow" >&2
+  echo "P5: Expected enable enforcer reviewer-metadata recovery to be silent allow" >&2
   exit 1
 fi
-assert_json_equals "$STATE_FILE" '.current_phase' '"review"'
+assert_json_equals "$STATE_FILE" '.current_phase' '"tdd"'
+
+# P5: Artifact fallback must ignore excluded .simulation trees
+write_v2_state "$STATE_FILE"
+mkdir -p "$MANUAL_PROMPT_PROJECT/.simulation/docs/superpowers/plans"
+touch "$MANUAL_PROMPT_PROJECT/.simulation/docs/superpowers/plans/fake-plan.md"
+P5_ARTIFACT_SIMULATION_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+rm -rf "$MANUAL_PROMPT_PROJECT/.simulation"
+if [ -n "$P5_ARTIFACT_SIMULATION_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer excluded .simulation artifact to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"init"'
+
+# P5: Artifact fallback must ignore excluded fixtures trees
+write_v2_state "$STATE_FILE"
+mkdir -p "$MANUAL_PROMPT_PROJECT/fixtures/docs/superpowers/specs"
+touch "$MANUAL_PROMPT_PROJECT/fixtures/docs/superpowers/specs/fake-spec.md"
+P5_ARTIFACT_FIXTURES_OUTPUT="$(
+  printf '{"hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"enable enforcer"}' "$MANUAL_PROMPT_PROJECT" \
+    | bash scripts/sync-user-prompt-state.sh
+)"
+rm -rf "$MANUAL_PROMPT_PROJECT/fixtures"
+if [ -n "$P5_ARTIFACT_FIXTURES_OUTPUT" ]; then
+  echo "P5: Expected enable enforcer excluded fixtures artifact to be silent allow" >&2
+  exit 1
+fi
+assert_json_equals "$STATE_FILE" '.current_phase' '"init"'

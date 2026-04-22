@@ -83,6 +83,8 @@ STATE_FILE="$PROJECT_DIR/.claude/flow_state.json"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 INIT_STATE_SCRIPT="$SCRIPT_DIR/init-state.sh"
+# shellcheck source=lib/workflow_paths.sh
+source "$SCRIPT_DIR/lib/workflow_paths.sh"
 
 bootstrap_state_if_missing() {
   if [ -f "$STATE_FILE" ]; then
@@ -153,9 +155,6 @@ recover_phase_from_state() {
   if jq -e '.worktree.created == true and (.worktree.baseline_verified // false) != true' "$state_file" >/dev/null 2>&1; then
     echo "worktree"; return 0
   fi
-  if jq -e '.task_flow.active_packet_role == "spec-reviewer" or .task_flow.active_packet_role == "code-reviewer"' "$state_file" >/dev/null 2>&1; then
-    echo "review"; return 0
-  fi
   if jq -e '.tdd.current_task != null or (.worktree.baseline_verified // false) == true' "$state_file" >/dev/null 2>&1; then
     echo "tdd"; return 0
   fi
@@ -166,16 +165,26 @@ recover_phase_from_state() {
     echo "brainstorming"; return 0
   fi
 
-  # Artifact fallback: check for canonical spec/plan files
+  # Artifact fallback: reuse canonical path classification semantics.
   if [ -d "$project_dir" ]; then
-    local plan_files
-    plan_files="$(find "$project_dir" -path '*/docs/superpowers/plans/*.md' -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.worktrees/*' 2>/dev/null | head -1)"
-    if [ -n "$plan_files" ]; then
-      echo "planning"; return 0
-    fi
-    local spec_files
-    spec_files="$(find "$project_dir" -path '*/docs/superpowers/specs/*.md' -not -path '*/.git/*' -not -path '*/node_modules/*' -not -path '*/vendor/*' -not -path '*/.worktrees/*' 2>/dev/null | head -1)"
-    if [ -n "$spec_files" ]; then
+    local candidate_path=""
+    local rel_path=""
+    local artifact_kind=""
+    local spec_found="false"
+    while IFS= read -r -d '' candidate_path; do
+      rel_path="${candidate_path#"$project_dir"/}"
+      artifact_kind="$(workflow_paths_classify_canonical_write "$rel_path")"
+      case "$artifact_kind" in
+        plan)
+          echo "planning"; return 0
+          ;;
+        spec)
+          spec_found="true"
+          ;;
+      esac
+    done < <(find "$project_dir" -type f -name '*.md' -print0 2>/dev/null)
+
+    if [ "$spec_found" = "true" ]; then
       echo "brainstorming"; return 0
     fi
   fi
