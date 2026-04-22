@@ -958,15 +958,40 @@ fi
 P3_TMP_DIR="$(mktemp -d)"
 P3_STATE_FILE="$P3_TMP_DIR/.claude/flow_state.json"
 P3_TEMPLATE="${CLAUDE_PLUGIN_ROOT}/templates/flow_state.json.tmpl"
+P3_REAL_JQ="$(command -v jq)"
+P3_FAKE_BIN="$P3_TMP_DIR/fake-bin"
 mkdir -p "$P3_TMP_DIR/.claude"
+mkdir -p "$P3_FAKE_BIN"
+
+cat > "$P3_FAKE_BIN/jq" <<EOF
+#!/bin/bash
+set -euo pipefail
+
+if [ "\${1:-}" = "-s" ] && [ "\${2:-}" = '.[0] * .[1]' ]; then
+  printf 'false\n'
+  exit 0
+fi
+
+for arg in "\$@"; do
+  if [ "\$arg" = '.[\$phase][\$field] = \$value' ] || [ "\$arg" = '.[\$field] = \$value' ]; then
+    printf 'false\n'
+    exit 0
+  fi
+done
+
+exec "$P3_REAL_JQ" "\$@"
+EOF
+chmod +x "$P3_FAKE_BIN/jq"
 
 # Test: bare boolean false should trigger backup + reset
 printf 'false' > "$P3_STATE_FILE"
+printf 'false' > "$P3_TMP_DIR/original-false.json"
 output="$(echo '{}' | CLAUDE_PROJECT_DIR="$P3_TMP_DIR" CLAUDE_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT" bash "$CLAUDE_PLUGIN_ROOT/scripts/init-state.sh")"
 if [ ! -f "$P3_STATE_FILE.bak" ]; then
   echo "FAIL: Expected .bak file to be created for corrupted state" >&2
   exit 1
 fi
+assert_backup_matches_original "$P3_TMP_DIR/original-false.json" "$P3_STATE_FILE.bak"
 if ! jq -e 'type == "object"' "$P3_STATE_FILE" >/dev/null 2>&1; then
   echo "FAIL: Expected state file to be reset to valid object" >&2
   exit 1
@@ -974,12 +999,14 @@ fi
 
 # Test: bare string should trigger backup + reset
 printf '"corrupted"' > "$P3_STATE_FILE"
+printf '"corrupted"' > "$P3_TMP_DIR/original-string.json"
 rm -f "$P3_STATE_FILE.bak"
 output="$(echo '{}' | CLAUDE_PROJECT_DIR="$P3_TMP_DIR" CLAUDE_PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT" bash "$CLAUDE_PLUGIN_ROOT/scripts/init-state.sh")"
 if [ ! -f "$P3_STATE_FILE.bak" ]; then
   echo "FAIL: Expected .bak file for string-corrupted state" >&2
   exit 1
 fi
+assert_backup_matches_original "$P3_TMP_DIR/original-string.json" "$P3_STATE_FILE.bak"
 
 # Test: valid v2 object should NOT be reset
 cp "$P3_TEMPLATE" "$P3_STATE_FILE"
@@ -1010,5 +1037,26 @@ if ! jq -e '.workflow.active == true' "$P3_STATE_FILE" >/dev/null 2>&1; then
   echo "FAIL: Object mutation should persist" >&2
   exit 1
 fi
+
+# Test: --merge should also reject non-object results at the write boundary
+cp "$P3_TEMPLATE" "$P3_STATE_FILE"
+cp "$P3_STATE_FILE" "$P3_TMP_DIR/pre-merge-state.json"
+if PATH="$P3_FAKE_BIN:$PATH" CLAUDE_PROJECT_DIR="$P3_TMP_DIR" bash "$CLAUDE_PLUGIN_ROOT/scripts/update-state.sh" --merge <<'EOF' >/dev/null 2>&1
+{"planning":{"plan_written":true}}
+EOF
+then
+  echo "FAIL: update-state.sh --merge should abort when the write result is non-object" >&2
+  exit 1
+fi
+assert_backup_matches_original "$P3_TMP_DIR/pre-merge-state.json" "$P3_STATE_FILE"
+
+# Test: standard field writes should also reject non-object results at the write boundary
+cp "$P3_TEMPLATE" "$P3_STATE_FILE"
+cp "$P3_STATE_FILE" "$P3_TMP_DIR/pre-field-update-state.json"
+if PATH="$P3_FAKE_BIN:$PATH" CLAUDE_PROJECT_DIR="$P3_TMP_DIR" bash "$CLAUDE_PLUGIN_ROOT/scripts/update-state.sh" brainstorming question_asked true >/dev/null 2>&1; then
+  echo "FAIL: update-state.sh field writes should abort when the write result is non-object" >&2
+  exit 1
+fi
+assert_backup_matches_original "$P3_TMP_DIR/pre-field-update-state.json" "$P3_STATE_FILE"
 
 rm -rf "$P3_TMP_DIR"
