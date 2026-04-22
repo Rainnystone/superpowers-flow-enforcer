@@ -2,6 +2,31 @@
 set -euo pipefail
 
 source tests/helpers/assert.sh
+source scripts/lib/platform_compat.sh
+
+forbidden_runtime_patterns=(
+  'scripts/init-state.sh:sha256sum'
+  'scripts/init-state.sh:shasum -a 256'
+  'scripts/lib/task_flow_packets.sh:^[[:space:]]*python([0-9]+)?([[:space:]]|$)'
+  'scripts/sync-post-tool-state.sh:^[[:space:]]*python([0-9]+)?([[:space:]]|$)'
+)
+
+for pattern in "${forbidden_runtime_patterns[@]}"; do
+  file="${pattern%%:*}"
+  needle="${pattern#*:}"
+  if [[ "$needle" == ^* ]]; then
+    if rg -n -e "$needle" "$file" >/dev/null; then
+      echo "Expected $file to stop using direct runtime assumption: $needle" >&2
+      exit 1
+    fi
+    continue
+  fi
+
+  if rg -n -F "$needle" "$file" >/dev/null; then
+    echo "Expected $file to stop using direct runtime assumption: $needle" >&2
+    exit 1
+  fi
+done
 
 post_tool_use_matchers="$(jq -r '.hooks.PostToolUse[].matcher' hooks/hooks.json)"
 
@@ -28,7 +53,7 @@ if [ "$user_prompt_hook_command" != 'bash ${CLAUDE_PLUGIN_ROOT}/scripts/sync-use
   exit 1
 fi
 
-python3 - <<'PY'
+platform_compat_run_python - <<'PY'
 import json
 import sys
 from pathlib import Path

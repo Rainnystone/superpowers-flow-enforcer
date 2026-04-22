@@ -33,10 +33,13 @@ HOOK_CWD="$(printf '%s' "$INPUT" | jq -r '
   end
 ' 2>/dev/null || true)"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
+# shellcheck source=lib/platform_compat.sh
+source "$PLUGIN_ROOT/scripts/lib/platform_compat.sh"
 # shellcheck source=lib/workflow_paths.sh
-source "$SCRIPT_DIR/lib/workflow_paths.sh"
+source "$PLUGIN_ROOT/scripts/lib/workflow_paths.sh"
 # shellcheck source=lib/task_flow_packets.sh
-source "$SCRIPT_DIR/lib/task_flow_packets.sh"
+source "$PLUGIN_ROOT/scripts/lib/task_flow_packets.sh"
 
 PROJECT_DIR="$(workflow_paths_resolve_project_root "$HOOK_CWD")"
 if [ -z "$PROJECT_DIR" ]; then
@@ -126,7 +129,7 @@ record_successful_agent_dispatch() {
 
 extract_worktree_path() {
   local command="$1"
-  python3 - "$command" <<'PY'
+  platform_compat_run_python - "$command" <<'PY'
 import os
 import shlex
 import sys
@@ -234,7 +237,7 @@ PY
 
 command_is_test() {
   local command="$1"
-  python3 - "$command" <<'PY'
+  platform_compat_run_python - "$command" <<'PY'
 import os
 import re
 import shlex
@@ -623,7 +626,7 @@ PY
 
 classify_failure_test_command() {
   local command="$1"
-  python3 - "$command" <<'PY'
+  platform_compat_run_python - "$command" <<'PY'
 import os
 import re
 import shlex
@@ -793,7 +796,7 @@ PY
 
 test_target_path() {
   local command="$1"
-  python3 - "$command" <<'PY'
+  platform_compat_run_python - "$command" <<'PY'
 import os
 import re
 import shlex
